@@ -9,8 +9,9 @@
 <!ELEMENT waypoints (waypoint+)>
 <!ELEMENT waypoint EMPTY>
 
-<!ELEMENT sectors (sector|kml)*>
+<!ELEMENT sectors (sector|noflyzone|kml)*>
 <!ELEMENT sector (corner,corner,corner+)>
+<!ELEMENT noflyzone (corner,corner,corner+)>
 <!ELEMENT corner EMPTY>
 <!ELEMENT kml EMPTY>
 
