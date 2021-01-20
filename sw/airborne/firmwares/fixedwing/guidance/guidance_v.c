@@ -32,6 +32,10 @@
 #include "autopilot.h"
 #include "firmwares/fixedwing/stabilization/stabilization_attitude.h" //> allow for roll control during landing final flare
 
+#ifndef MAX_AIRSPEED
+#define MAX_AIRSPEED 44.704
+#endif
+
 /* mode */
 uint8_t v_ctl_mode;
 
@@ -477,6 +481,9 @@ inline static void v_ctl_climb_auto_throttle_loop(void)
 
 inline static void v_ctl_climb_auto_throttle_loop(void)
 {
+  if(v_ctl_auto_airspeed_setpoint > MAX_AIRSPEED) {
+    v_ctl_auto_airspeed_setpoint = MAX_AIRSPEED;
+  }
   float f_throttle = 0;
   float controlled_throttle;
   float v_ctl_pitch_of_vz;
