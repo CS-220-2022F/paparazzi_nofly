@@ -1,0 +1,19 @@
+<!DOCTYPE flight_plan SYSTEM "flight_plan.dtd">
+
+<flight_plan security_height="25" alt="450" ground_alt="380" lat0="38" lon0="-97" max_dist_from_home="1000" name="SpeedTest">
+  <waypoints>
+    <waypoint name="HOME" x="0" y="0"/>
+    <waypoint name="STDBY" x="0" y="75"/>
+    <waypoint name="START" x="-1000" y="0"/>
+    <waypoint name="END" x="1000" y="0"/>
+  </waypoints>
+  <blocks>
+    <block name="Standby">
+      <circle radius="75" wp="STDBY" alt="450"/>
+    </block>
+    <block name="GoFast">
+      <go wp="START" alt="450"/>
+      <go wp="END" hmode="route" throttle="1.0" alt="450"/>
+    </block>
+  </blocks>
+</flight_plan>
