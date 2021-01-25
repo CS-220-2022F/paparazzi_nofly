@@ -96,6 +96,11 @@ name CDATA #REQUIRED
 color CDATA #IMPLIED
 type CDATA #IMPLIED>
 
+<!ATTLIST noflyzone
+name CDATA #REQUIRED
+color CDATA #IMPLIED
+type CDATA #IMPLIED>
+
 <!ATTLIST corner
 name CDATA #REQUIRED>
 

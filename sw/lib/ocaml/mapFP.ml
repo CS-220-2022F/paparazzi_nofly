@@ -287,7 +287,24 @@ class flight_plan = fun ?format_attribs ?editable ~show_moved geomap color fp_dt
               [(wp_names, segments, color_sector)] @ l
             else
               l
-          | _ -> failwith "Unknown sectors child")
+	  | "noflyzone" ->
+let wgs84 = fun wp_name ->
+              let wp_name = Xml.attrib wp_name "name" in
+              let select = fun wp -> Xml.attrib wp "name" = wp_name in
+              let wp = ExtXml.child waypoints ~select "waypoint" in
+              let float_attr = fun xml a -> float_of_string (Xml.attrib xml a) in
+              geo_of_xml utm0 (float_attr wp) in
+            let points = List.map wgs84 (Xml.children x) in
+            let points = Array.of_list points in
+            let color_sector = ExtXml.attrib_or_default x "color" color in
+            let segments = display_lines ~group:wpts_group#group color_sector geomap points in
+            let wp_names = List.map (fun wp -> Xml.attrib wp "name") (Xml.children x) in
+            if ExtXml.attrib_or_default x "type" "" = "dynamic" then
+              [(wp_names, segments, color_sector)] @ l
+            else
+              l
+
+	  | _ -> failwith "Unknown sectors child")
       [] (Xml.children (ExtXml.child xml "sectors"))
     with Not_found -> [] in
 
