@@ -1,4 +1,4 @@
-<!ELEMENT sectors (sector|noflyzone+)>
+<!ELEMENT sectors (sector|noflyzone)+>
 <!ELEMENT sector (disc|rectangle|polygon|union|intersection)>
 <!ELEMENT noflyzone (disc|rectangle|polygon|union|intersection)>
 <!ELEMENT union (disc|rectangle|polygon|union|intersection)+>
