@@ -27,6 +27,16 @@
     <waypoint name="d8" x="116.5" y="109.6"/>
     <waypoint name="d9" x="109.7" y="104.6"/>
     <waypoint name="dest" x="150" y="150"/>
+    <waypoint name="e0" x="88.4" y="76.1"/>
+    <waypoint name="e1" x="48.1" y="101.4"/>
+    <waypoint name="e2" x="55.9" y="143.0"/>
+    <waypoint name="e3" x="79.4" y="156.2"/>
+    <waypoint name="e4" x="103.1" y="162.0"/>
+    <waypoint name="e5" x="123.0" y="153.3"/>
+    <waypoint name="e6" x="135.9" y="140.0"/>
+    <waypoint name="e7" x="140.2" y="117.4"/>
+    <waypoint name="e8" x="134.6" y="97.5"/>
+    <waypoint name="e9" x="119.8" y="82.1"/>
   </waypoints>
   <sectors>
     <sector color="blue" name="exampleSector">
@@ -51,10 +61,24 @@
       <corner name="d8"/>
       <corner name="d9"/>
     </noflyzone>
+    <noflyzone color="orange" name="keepOutBuffer">
+      <corner name="e0"/>
+      <corner name="e1"/>
+      <corner name="e2"/>
+      <corner name="e3"/>
+      <corner name="e4"/>
+      <corner name="e5"/>
+      <corner name="e6"/>
+      <corner name="e7"/>
+      <corner name="e8"/>
+      <corner name="e9"/>
+    </noflyzone>
   </sectors>
+  <exceptions>
+    <exception cond="InsideKeepOutBuffer(GetPosX(), GetPosY())" deroute="GoHome"/>
+  </exceptions>
   <blocks>
     <block name="GoThroughNoFlyZone">
-      <exception cond="InsideKeepOut(GetPosX(), GetPosY())" deroute="GoHome"/>
       <path wpts="HOME, STDBY, dest"/>
     </block>
     <block name="GoHome">
