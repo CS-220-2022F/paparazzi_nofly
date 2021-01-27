@@ -16,6 +16,16 @@
     <waypoint name="c5" x="-35" y="-35"/>
     <waypoint name="c6" x="-50" y="0"/>
     <waypoint name="c7" x="-35" y="35"/>
+    <waypoint name="d0" x="100" y="100"/>
+    <waypoint name="d1" x="75" y="115"/>
+    <waypoint name="d2" x="80" y="125"/>
+    <waypoint name="d3" x="90" y="130"/>
+    <waypoint name="d4" x="100" y="132"/>
+    <waypoint name="d5" x="110" y="130"/>
+    <waypoint name="d6" x="115" y="128"/>
+    <waypoint name="d7" x="120" y="120"/>
+    <waypoint name="d8" x="116.5" y="109.6"/>
+    <waypoint name="d9" x="109.7" y="104.6"/>
   </waypoints>
   <sectors>
     <noflyzone color="red" name="KeepOut">
@@ -28,6 +38,18 @@
       <corner name="c6"/>
       <corner name="c7"/>
     </noflyzone>
+    <sector color="blue" name="examplesector">
+      <corner name="d0"/>
+      <corner name="d1"/>
+      <corner name="d2"/>
+      <corner name="d3"/>
+      <corner name="d4"/>
+      <corner name="d5"/>
+      <corner name="d6"/>
+      <corner name="d7"/>
+      <corner name="d8"/>
+      <corner name="d9"/>
+    </sector>
   </sectors>
   <blocks>
     <block name="AscendingHelixTargetAlt">

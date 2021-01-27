@@ -1,1 +1,1 @@
-grep -n --color "$1" $(grep -lr "$1" $PAPARAZZI_HOME | grep "\\.[ch]$")
+grep -n --with-filename --color "$1" $(grep -lr "$1" $PAPARAZZI_HOME | grep "\\.[ch]$")
