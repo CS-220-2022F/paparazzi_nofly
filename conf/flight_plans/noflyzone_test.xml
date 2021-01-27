@@ -26,9 +26,10 @@
     <waypoint name="d7" x="120" y="120"/>
     <waypoint name="d8" x="116.5" y="109.6"/>
     <waypoint name="d9" x="109.7" y="104.6"/>
+    <waypoint name="dest" x="150" y="150"/>
   </waypoints>
   <sectors>
-    <noflyzone color="red" name="KeepOut">
+    <sector color="blue" name="exampleSector">
       <corner name="c0"/>
       <corner name="c1"/>
       <corner name="c2"/>
@@ -37,8 +38,8 @@
       <corner name="c5"/>
       <corner name="c6"/>
       <corner name="c7"/>
-    </noflyzone>
-    <sector color="blue" name="examplesector">
+    </sector>
+    <noflyzone color="red" name="keepOut">
       <corner name="d0"/>
       <corner name="d1"/>
       <corner name="d2"/>
@@ -49,11 +50,12 @@
       <corner name="d7"/>
       <corner name="d8"/>
       <corner name="d9"/>
-    </sector>
+    </noflyzone>
   </sectors>
   <blocks>
-    <block name="AscendingHelixTargetAlt">
-      <circle alt="600.0" radius="75" wp="HOME"/>
+    <block name="GoThroughNoFlyZone">
+      <exception cond="InsideKeepOut(GetPosX(), GetPosY())" deroute="GoHome"/>
+      <path wpts="HOME, STDBY, dest"/>
     </block>
     <block name="GoHome">
       <go wp="HOME"/>

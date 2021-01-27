@@ -1104,6 +1104,19 @@ let print_flight_plan_h = fun xml utm0 xml_file out_file ->
   let sectors = List.map (parse_wpt_sector index_of_waypoints waypoints) sectors in
   List.iter2 (print_inside_sector out) sectors_type sectors;
 
+(* index of waypoints *)
+  let index_of_waypoints =
+    let i = ref (-1) in
+    List.map (fun w -> incr i; (name_of w, !i)) waypoints in
+
+  (* print noflyzones *)
+  let sectors_element = try ExtXml.child xml "sectors" with Not_found -> Xml.Element ("", [], []) in
+  let noflyzones = List.filter (fun x -> Compat.lowercase_ascii (Xml.tag x) = "noflyzone") (Xml.children sectors_element) in
+  let sectors_type = List.map (fun x -> match ExtXml.attrib_or_default x "type" "static" with "dynamic" -> DynamicSector | _ -> StaticSector) noflyzones in
+  let noflyzones = List.map (parse_wpt_sector index_of_waypoints waypoints) noflyzones in
+  List.iter2 (print_inside_sector out) sectors_type noflyzones;  
+
+
   (* print main flight plan state machine *)
   lprintf out "\nstatic inline void auto_nav(void) {\n";
   right ();
