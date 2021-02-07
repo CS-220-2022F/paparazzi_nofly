@@ -304,4 +304,3 @@ void autopilot_send_version(void)
  *  actual implementation is firmware dependent
  */
 void WEAK autopilot_send_mode(void) {}
-

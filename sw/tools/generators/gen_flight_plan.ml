@@ -837,6 +837,18 @@ let parse_wpt_sector = fun indexes waypoints xml ->
   in
   (sector_name, List.map p2D_of (Xml.children xml))
 
+let print_approaching_nfz = fun out t (s, pts) ->
+  lprintf out "static inline bool approaching%s() {\n" (Compat.capitalize_ascii s);
+  right ();
+  lprintf out "coords nfz[%d] = {" (List.length pts);
+  let get_second (_,a) = a in
+  let string_of_coords = fun pt -> sprintf "{%.1f, %.1f}" (get_second pt).G2D.x2D (get_second pt).G2D.y2D in
+  let string_of_nfz = List.map string_of_coords pts in
+  List.iteri (fun i str -> if (i+1) < (List.length pts) then fprintf out "%s," str else fprintf out "%s};\n" str) string_of_nfz;
+  lprintf out "return Inside%s(carrot_x, carrot_y) || path_intersect_nfz(%d, &(nfz[0])) || Inside%s(GetPosX(), GetPosY());\n" (Compat.capitalize_ascii s) (List.length pts) (Compat.capitalize_ascii s);
+  left ();
+  lprintf out "}\n"
+
 
 (** FP variables and ABI auto bindings *)
 type fp_var = FP_var of (string * string * string) | FP_binding of (string * string list option * string * string option)
@@ -1104,22 +1116,17 @@ let print_flight_plan_h = fun xml utm0 xml_file out_file ->
   let sectors = List.map (parse_wpt_sector index_of_waypoints waypoints) sectors in
   List.iter2 (print_inside_sector out) sectors_type sectors;
 
-(* index of waypoints *)
-  let index_of_waypoints =
-    let i = ref (-1) in
-    List.map (fun w -> incr i; (name_of w, !i)) waypoints in
-
-  (* print noflyzones *)
-  let sectors_element = try ExtXml.child xml "sectors" with Not_found -> Xml.Element ("", [], []) in
-  let noflyzones = List.filter (fun x -> Compat.lowercase_ascii (Xml.tag x) = "noflyzone") (Xml.children sectors_element) in
+let noflyzones = List.filter (fun x -> Compat.lowercase_ascii (Xml.tag x) = "noflyzone") (Xml.children sectors_element) in
   let sectors_type = List.map (fun x -> match ExtXml.attrib_or_default x "type" "static" with "dynamic" -> DynamicSector | _ -> StaticSector) noflyzones in
-  let noflyzones = List.map (parse_wpt_sector index_of_waypoints waypoints) noflyzones in
-  List.iter2 (print_inside_sector out) sectors_type noflyzones;  
+  let nfzs = List.map (parse_wpt_sector index_of_waypoints waypoints) noflyzones in
+  List.iter2 (print_inside_sector out) sectors_type nfzs;
+  List.iter2 (print_approaching_nfz out) sectors_type nfzs;
 
 
   (* print main flight plan state machine *)
   lprintf out "\nstatic inline void auto_nav(void) {\n";
   right ();
+  List.iter (fun x -> fprintf out "if(approaching%s()) { GotoBlock(1); return; }\n" (Compat.capitalize_ascii (ExtXml.attrib x "name"))) noflyzones;
   List.iter (print_exception out) global_exceptions;
   lprintf out "switch (nav_block) {\n";
   right ();

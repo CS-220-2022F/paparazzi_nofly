@@ -816,3 +816,48 @@ void nav_oval(uint8_t p1, uint8_t p2, float radius)
       return;
   }
 }
+
+/*for no-fly zones*/
+
+/**
+ * Determine if a two line segments intersect. Return 1 if they intersect.
+ * Adapted from nav_survey_polygon.c.
+ * Will also return 1 if the second line segment comes up a little short.
+ */
+int intersect_two_lines(float *x_i, float *y_i, float ax0, float ay0, float ax1, float ay1, float bx0, float by0, float bx1, float by1) {
+  float divider, fac0, fac1;
+  divider = (((by1 - by0) * (ax1 - ax0)) + ((ay0 - ay1) * (bx1 - bx0)));
+  if (divider == 0) { return 0; }
+  fac0 = ((ax1 * (ay0 - by0)) + (ax0 * (by0 - ay1)) + (bx0 * (ay1 - ay0))) / divider;
+  if (fac0 > 1.5) { return 0; }
+  if (fac0 < 0.0) { return 0; }
+
+  fac1 = ((bx1 * (by0 - ay0)) + (bx0 * (ay0 - by1)) + (ax0 * (by1 - by0))) / divider;
+  if((fac1 < 0.0) || (fac1 > 1.0)) return 0;
+  
+  *x_i = bx0 + fac0 * (bx1 - bx0);
+  *y_i = by0 + fac0 * (by1 - by0);
+  
+  return 1;
+}
+
+/**
+ * Determine if the UAV is about to enter a no-fly zone
+ */
+int path_intersect_nfz(int num_verts, coords *verts) {
+  int intersects;
+  float intersect_x, intersect_y, v0_x, v0_y, v1_x, v1_y;
+  for(int i = 0; i < num_verts-1; i++) {
+    v0_x = verts[i][0];
+    v0_y = verts[i][1];
+    v1_x = verts[i+1][0];
+    v1_y = verts[i+1][1];
+    intersects = intersect_two_lines(&intersect_x, &intersect_y, v0_x, v0_y, v1_x, v1_y, GetPosX(), GetPosY(), carrot_x, carrot_y);
+    if(intersects) {
+      return i+1;
+    }
+  }
+  return 0;
+}
+
+/*end for no-fly zones*/

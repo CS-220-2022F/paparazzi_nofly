@@ -61,22 +61,7 @@
       <corner name="d8"/>
       <corner name="d9"/>
     </noflyzone>
-    <noflyzone color="orange" name="keepOutBuffer">
-      <corner name="e0"/>
-      <corner name="e1"/>
-      <corner name="e2"/>
-      <corner name="e3"/>
-      <corner name="e4"/>
-      <corner name="e5"/>
-      <corner name="e6"/>
-      <corner name="e7"/>
-      <corner name="e8"/>
-      <corner name="e9"/>
-    </noflyzone>
   </sectors>
-  <exceptions>
-    <exception cond="InsideKeepOutBuffer(GetPosX(), GetPosY())" deroute="GoHome"/>
-  </exceptions>
   <blocks>
     <block name="GoThroughNoFlyZone">
       <path wpts="HOME, STDBY, dest"/>

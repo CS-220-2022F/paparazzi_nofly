@@ -236,6 +236,8 @@ bool nav_approaching_xy(float x, float y, float from_x, float from_y, float appr
  */
 #define GetAltRef() (ground_alt)
 
+
+
 #if DOWNLINK
 #define SEND_NAVIGATION(_trans, _dev) { \
     uint8_t _circle_count = NavCircleCount(); \
@@ -247,6 +249,18 @@ bool nav_approaching_xy(float x, float y, float from_x, float from_y, float appr
   }
 
 extern void DownlinkSendWpNr(uint8_t _wp);
+
+
+
+/*for no-fly zones*/
+
+typedef float coords[2];
+
+extern int intersect_two_lines(float *x_i, float *y_i, float ax0, float ay0, float ax1, float ay1, float bx0, float by0, float bx1, float by1);
+
+extern int path_intersect_nfz(int num_verts, coords *verts);
+
+  /*end for no-fly zones*/
 
 #endif /* DOWNLINK */
 
