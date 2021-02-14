@@ -845,7 +845,9 @@ let print_approaching_nfz = fun out t (s, pts) ->
   let string_of_coords = fun pt -> sprintf "{%.1f, %.1f}" (get_second pt).G2D.x2D (get_second pt).G2D.y2D in
   let string_of_nfz = List.map string_of_coords pts in
   List.iteri (fun i str -> if (i+1) < (List.length pts) then fprintf out "%s," str else fprintf out "%s};\n" str) string_of_nfz;
-  lprintf out "return Inside%s(carrot_x, carrot_y) || path_intersect_nfz(%d, &(nfz[0])) || Inside%s(GetPosX(), GetPosY());\n" (Compat.capitalize_ascii s) (List.length pts) (Compat.capitalize_ascii s);
+  let check = "printf(\"Position: %.1f, %.1f; Carrot: %.1f, %.1f\\n\", GetPosX(), GetPosY(), desired_x, desired_y);" in
+  lprintf out "if(Inside%s(GetPosX(), GetPosY())) { %s }\n" (Compat.capitalize_ascii s) check;
+  lprintf out "return Inside%s(desired_x, desired_y) || path_intersect_nfz(%d, &(nfz[0])) || Inside%s(GetPosX(), GetPosY());\n" (Compat.capitalize_ascii s) (List.length pts) (Compat.capitalize_ascii s);
   left ();
   lprintf out "}\n"
 

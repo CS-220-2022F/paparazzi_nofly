@@ -829,7 +829,7 @@ int intersect_two_lines(float *x_i, float *y_i, float ax0, float ay0, float ax1,
   divider = (((by1 - by0) * (ax1 - ax0)) + ((ay0 - ay1) * (bx1 - bx0)));
   if (divider == 0) { return 0; }
   fac0 = ((ax1 * (ay0 - by0)) + (ax0 * (by0 - ay1)) + (bx0 * (ay1 - ay0))) / divider;
-  if (fac0 > 1.5) { return 0; }
+  if (fac0 > 1.1) { return 0; }
   if (fac0 < 0.0) { return 0; }
 
   fac1 = ((bx1 * (by0 - ay0)) + (bx0 * (ay0 - by1)) + (ax0 * (by1 - by0))) / divider;
@@ -852,7 +852,7 @@ int path_intersect_nfz(int num_verts, coords *verts) {
     v0_y = verts[i][1];
     v1_x = verts[i+1][0];
     v1_y = verts[i+1][1];
-    intersects = intersect_two_lines(&intersect_x, &intersect_y, v0_x, v0_y, v1_x, v1_y, GetPosX(), GetPosY(), carrot_x, carrot_y);
+    intersects = intersect_two_lines(&intersect_x, &intersect_y, v0_x, v0_y, v1_x, v1_y, GetPosX(), GetPosY(), desired_x, desired_y);
     if(intersects) {
       return i+1;
     }
