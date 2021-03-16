@@ -820,7 +820,7 @@ void nav_oval(uint8_t p1, uint8_t p2, float radius)
 /*for no-fly zones*/
 
 /**
- * Determine if a two line segments intersect. Return 1 if they intersect.
+ * Determine if two line segments intersect. Return 1 if they intersect.
  * Adapted from nav_survey_polygon.c.
  * Will also return 1 if the second line segment comes up a little short.
  */
@@ -829,8 +829,7 @@ int intersect_two_lines(float *x_i, float *y_i, float ax0, float ay0, float ax1,
   divider = (((by1 - by0) * (ax1 - ax0)) + ((ay0 - ay1) * (bx1 - bx0)));
   if (divider == 0) { return 0; }
   fac0 = ((ax1 * (ay0 - by0)) + (ax0 * (by0 - ay1)) + (bx0 * (ay1 - ay0))) / divider;
-  if (fac0 > 1.1) { return 0; }
-  if (fac0 < 0.0) { return 0; }
+  if ((fac0 > 1.1) || (fac0 < 0.0))  return 0; 
 
   fac1 = ((bx1 * (by0 - ay0)) + (bx0 * (ay0 - by1)) + (ax0 * (by1 - by0))) / divider;
   if((fac1 < 0.0) || (fac1 > 1.0)) return 0;
@@ -858,6 +857,34 @@ int path_intersect_nfz(int num_verts, coords *verts) {
     }
   }
   return 0;
+}
+
+//formula from Wikipedia:
+//https://en.wikipedia.org/wiki/Centroid#Of_a_polygon
+coords centroid(int num_verts, coords *verts) {
+  int i = 0;
+  float A = verts[num_verts-1][0] * verts[0][1] - verts[0][0] * verts[num_verts-1][1];
+  float Cx = (verts[num_verts-1][0] + verts[0][0]) * (verts[num_verts-1][0]*verts[0][1] - verts[0][0]*verts[num_verts-1][1]),
+    Cy = (verts[num_verts-1][1] + verts[0][1]) * (verts[num_verts-1][0]*verts[0][1] - verts[0][0]*verts[num_verts-1][1]);
+  for(i=0; i < num_verts-1; i++) {
+    A += verts[i][0]*verts[i+1][1] - verts[i+1][0]*verts[i][1];
+    Cx += (verts[i][0] + verts[i+1][0]) * (verts[i][0]*verts[i+1][1] - verts[i][1]*verts[i+1][0]);
+    Cy += (verts[i][1] + verts[i+1][1]) * (verts[i][0]*verts[i+1][1] - verts[i][1]*verts[i+1][0])
+  }
+  A /= 2;
+  Cx /= (6 * A);
+  Cy /= (6 * A);
+  return {Cx, Cy};
+}
+
+float get_angle(coords p0, coords p1, int num_verts, coords *verts) {
+  coords c = centroid(num_verts, verts);
+  coords a = {c[0] - p0[0], c[1] - p0[1]},
+    b = {c[0] - p1[0], c[1] - p1[1]};
+  float adotb = a[0]*b[0] + a[1]*b[1];
+  float a_mag = sqrt(pow(a[0],2) + pow(a[1],2)),
+    b_mag = sqrt(pow(b[0],2) + pow(b[1],2));
+  return acos(adotb / (a_mag * b_mag));
 }
 
 /*end for no-fly zones*/
