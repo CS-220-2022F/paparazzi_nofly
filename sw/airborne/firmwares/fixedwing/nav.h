@@ -260,7 +260,7 @@ extern int intersect_two_lines(float *x_i, float *y_i, float ax0, float ay0, flo
 
 extern int path_intersect_nfz(int num_verts, coords *verts);
 
-extern coords centroid(int num_verts, coords *verts);
+extern float *centroid(int num_verts, coords *verts);
 
 extern float get_angle(coords p0, coords p1, int num_verts, coords *verts);
 

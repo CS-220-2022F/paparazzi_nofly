@@ -26,16 +26,16 @@
     <waypoint name="d7" x="120" y="120"/>
     <waypoint name="d8" x="116.5" y="109.6"/>
     <waypoint name="d9" x="109.7" y="104.6"/>
-    <waypoint name="e0" x="0" y="100"/>
-    <waypoint name="e1" x="-25" y="115"/>
-    <waypoint name="e2" x="-20" y="125"/>
-    <waypoint name="e3" x="-10" y="130"/>
-    <waypoint name="e4" x="0" y="132"/>
-    <waypoint name="e5" x="10" y="130"/>
-    <waypoint name="e6" x="15" y="128"/>
-    <waypoint name="e7" x="20" y="120"/>
-    <waypoint name="e8" x="16.5" y="109.6"/>
-    <waypoint name="e9" x="9.7" y="104.6"/>
+    <waypoint name="e0" x="-66.2" y="93.0"/>
+    <waypoint name="e1" x="-68.7" y="111.8"/>
+    <waypoint name="e2" x="-57.6" y="128.8"/>
+    <waypoint name="e3" x="-37.7" y="141.3"/>
+    <waypoint name="e4" x="-20.0" y="140.3"/>
+    <waypoint name="e5" x="-15.2" y="129.4"/>
+    <waypoint name="e6" x="-17.1" y="116.1"/>
+    <waypoint name="e7" x="-26.8" y="103.5"/>
+    <waypoint name="e8" x="-38.3" y="96.8"/>
+    <waypoint name="e9" x="-51.3" y="93.8"/>
     <waypoint name="dest" x="150" y="150"/>
   </waypoints>
   <sectors>

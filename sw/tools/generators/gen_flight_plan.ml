@@ -40,6 +40,8 @@ let index_of_blocks = ref []
 
 let check_expressions = ref false
 
+let nfzs_list = ref []
+
 let cm = fun x -> 100. *. x
 
 let parse = fun s ->
@@ -821,6 +823,35 @@ let print_inside_sector = fun out t (s, pts) ->
   left ();
   lprintf out "}\n"
 
+let print_inside_nfz = fun out t (s,pts) ->
+  lprintf out "static inline bool %s(float _x, float _y) {\n" (inside_function s);
+  right ();
+  begin
+    match t with
+    | StaticSector -> print_inside_polygon out pts
+    | DynamicSector -> print_inside_polygon_global out pts
+  end;
+  left ();
+  lprintf out "}\n";
+  nfzs_list := (inside_function s) :: !nfzs_list
+
+let print_update_occgrid = fun out ->
+  lprintf out "static inline void update_occgrid(void) {\n";
+  right();
+  lprintf out "int i, j;\n";
+  lprintf out "for(i = -center; i <= center; i++) {\n";
+  right();
+  lprintf out "for(j = -center; j <= center; j++) {\n" ;
+  right();
+  let add_args = fun x -> sprintf "%s(center+i,center+j)" x in
+  lprintf out "occupancy_grid[i][j] = (center*center < i*i + j*j) || %s;\n" (String.concat " || " (List.map add_args !nfzs_list));
+  left();
+  lprintf out "}\n";
+  left();
+  lprintf out "}\n";
+  left();
+  lprintf out "}\n"
+
 
 let parse_wpt_sector = fun indexes waypoints xml ->
   let sector_name = ExtXml.attrib xml "name" in
@@ -849,6 +880,62 @@ let print_approaching_nfz = fun out t (s, pts) ->
   lprintf out "if(Inside%s(GetPosX(), GetPosY())) { %s }\n" (Compat.capitalize_ascii s) check;
   lprintf out "return Inside%s(desired_x, desired_y) || path_intersect_nfz(%d, &(nfz[0])) || Inside%s(GetPosX(), GetPosY());\n" (Compat.capitalize_ascii s) (List.length pts) (Compat.capitalize_ascii s);
   left ();
+  lprintf out "}\n"
+
+let print_go_around_nfz = fun out t (s,pts) ->
+  lprintf out "static inline void circumvent%s(int goal_wp) {\n" (Compat.capitalize_ascii s);
+  right();
+  lprintf out "coords nfz[%d] = {" (List.length pts);
+  let get_second (_,a) = a in
+  let string_of_coords = fun pt -> sprintf "{%.1f, %.1f}" (get_second pt).G2D.x2D (get_second pt).G2D.y2D in
+  let string_of_nfz = List.map string_of_coords pts in
+  List.iteri (fun i str -> if (i+1) < (List.length pts) then fprintf out "%s," str else fprintf out "%s};\n" str) string_of_nfz;
+  (* Need to find a way to get the eventual goal point. *)
+  lprintf out "//TODO Work in progress\n";
+  lprintf out "float angle = get_angle({GetPosX(), GetPosY()}, {waypoints[goal_wp].x, waypoints[goal_wp].y}, %d, &(nfz[0]));\n" (List.length pts);
+  lprintf out "float *ctrd = centroid(%d, &(nfz[0]));\n" (List.length pts);
+  lprintf out "int furthest_idx = 0;\n";
+  lprintf out "float max_dist = sqrt(pow(nfz[0][0] - ctrd[0], 2) + pow(nfz[0][1] - ctrd[1], 2));\n";
+  lprintf out "for(int i = 1; i < %d; i++) {\n" (List.length pts);
+  right();
+  lprintf out "float dist = sqrt(pow(nfz[i][0] - ctrd[0], 2) + pow(nfz[i][1] - ctrd[1], 2));\n";
+  lprintf out "if(dist > max_dist) {\n";
+  right();
+  lprintf out "furthest_idx = i;\n";
+  lprintf out "max_dist = dist;\n";
+  left();
+  lprintf out "}\n";
+  left();
+  lprintf out "}\n";
+  lprintf out "if(angle > 0.0) {\n";
+  right();
+  lprintf out "//go counterclockwise\n";
+  lprintf out "nav_circle_XY(ctrd[0], ctrd[1], -max_dist);\n";
+  left();
+  lprintf out "}\n";
+  lprintf out "else {\n";
+  right();
+  lprintf out "//go clockwise\n";
+  lprintf out "nav_circle_XY(ctrd[0], ctrd[1], max_dist);\n";
+  left();
+  lprintf out "}\n";
+  left();
+  lprintf out "}\n"
+
+let print_check_nfz = fun out s index_of_waypoints x ->
+  lprintf out "if(approaching%s()) {\n" (Compat.capitalize_ascii s);
+  right();
+  let wp =
+          try
+            get_index_waypoint (ExtXml.attrib x "wp") index_of_waypoints
+          with
+              ExtXml.Error _ ->
+                lprintf out "waypoints[0].x = %s;\n" (parsed_attrib x "x");
+                lprintf out "waypoints[0].y = %s;\n" (parsed_attrib x "y");
+                "0"
+  in
+  lprintf out "circumvent%s(%s)\n" (Compat.capitalize_ascii s) wp;
+  left();
   lprintf out "}\n"
 
 
@@ -1106,6 +1193,11 @@ let print_flight_plan_h = fun xml utm0 xml_file out_file ->
   lprintf out "\n";
   print_auto_init_bindings out abi_msgs variables;
 
+  let center = int_of_float (ceil mdfh) in
+  let arr_size = 2 * center + 1 in
+  lprintf out "int occupancy_grid[%d][%d];\n" arr_size arr_size;
+  lprintf out "const int center = %d;\n" center;
+
   (* index of waypoints *)
   let index_of_waypoints =
     let i = ref (-1) in
@@ -1121,14 +1213,17 @@ let print_flight_plan_h = fun xml utm0 xml_file out_file ->
 let noflyzones = List.filter (fun x -> Compat.lowercase_ascii (Xml.tag x) = "noflyzone") (Xml.children sectors_element) in
   let sectors_type = List.map (fun x -> match ExtXml.attrib_or_default x "type" "static" with "dynamic" -> DynamicSector | _ -> StaticSector) noflyzones in
   let nfzs = List.map (parse_wpt_sector index_of_waypoints waypoints) noflyzones in
-  List.iter2 (print_inside_sector out) sectors_type nfzs;
-  List.iter2 (print_approaching_nfz out) sectors_type nfzs;
+  List.iter2 (print_inside_nfz out) sectors_type nfzs;
+  print_update_occgrid out;
+  (* List.iter2 (print_approaching_nfz out) sectors_type nfzs; *)
+  (* List.iter2 (print_go_around_nfz out) sectors_type nfzs; *)
 
 
   (* print main flight plan state machine *)
   lprintf out "\nstatic inline void auto_nav(void) {\n";
-  right ();
-  List.iter (fun x -> fprintf out "if(approaching%s()) { GotoBlock(1); return; }\n" (Compat.capitalize_ascii (ExtXml.attrib x "name"))) noflyzones;
+  (* right ();
+  List.iter (fun x -> print_check_nfz out (Compat.capitalize_ascii (ExtXml.attrib x "name")) index_of_waypoints)) noflyzones;
+  left(); *)
   List.iter (print_exception out) global_exceptions;
   lprintf out "switch (nav_block) {\n";
   right ();
