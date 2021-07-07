@@ -268,8 +268,8 @@ extern coords *buffer_zone(int num_verts, struct point *verts);
 
 struct vis_node;
 
-extern int num_nodes;
-extern struct vis_node **nodes;
+/*extern int num_nodes;
+  extern struct vis_node **nodes;*/
 
 extern int add_neighbor(struct vis_node *node, struct vis_node *new_neighbor, int weight);
 

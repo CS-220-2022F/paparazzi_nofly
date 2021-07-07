@@ -840,6 +840,23 @@ int intersect_two_lines(float *x_i, float *y_i, float ax0, float ay0, float ax1,
   return 1;
 }
 
+//same as above, but will NOT give any wiggle room
+int intersect_two_lines_absolute(float *x_i, float *y_i, float ax0, float ay0, float ax1, float ay1, float bx0, float by0, float bx1, float by1) {
+  float divider, fac0, fac1;
+  divider = (((by1 - by0) * (ax1 - ax0)) + ((ay0 - ay1) * (bx1 - bx0)));
+  if (divider == 0) { return 0; }
+  fac0 = ((ax1 * (ay0 - by0)) + (ax0 * (by0 - ay1)) + (bx0 * (ay1 - ay0))) / divider;
+  if ((fac0 >= 1.0) || (fac0 <= 0.0))  return 0; 
+
+  fac1 = ((bx1 * (by0 - ay0)) + (bx0 * (ay0 - by1)) + (ax0 * (by1 - by0))) / divider;
+  if((fac1 <= 0.0) || (fac1 >= 1.0)) return 0;
+  
+  *x_i = bx0 + fac0 * (bx1 - bx0);
+  *y_i = by0 + fac0 * (by1 - by0);
+  
+  return 1;
+}
+
 /**
  * Determine if the UAV is about to enter a no-fly zone
  */
@@ -892,6 +909,262 @@ float get_angle(coords p0, coords p1, int num_verts, coords *verts) {
   if(a_slope < b_slope)
     return angle;
   return -angle;
+}
+
+coords *buffer_zone(int num_verts, struct point *verts) {
+  const float RATIO = 1.1;
+  coords verts_as_coords[num_verts];
+  for(int i = 0; i < num_verts; i++) {
+    verts_as_coords[i][0] = verts[i].x;
+    verts_as_coords[i][1] = verts[i].y;
+  }
+  float *c = centroid(num_verts, verts_as_coords);
+  coords *bz = (coords *)calloc(sizeof(coords), num_verts);
+  for(int i = 0; i < num_verts; i++) {
+    bz[i][0] = c[0] + RATIO * (verts[i].x - c[0]);
+    bz[i][1] = c[1] + RATIO * (verts[i].y - c[1]);
+  }
+  return bz;
+}
+
+enum VISIT_STATUS {UNVISITED, VISITING, VISITED};
+
+//int node_id_gen = 0;
+
+struct vis_node {
+  int num_neighbors;
+  int capacity;
+  struct vis_node **neighbors;
+  int *weights;
+  float x, y;
+  int node_id;
+  enum VISIT_STATUS status;
+};
+
+struct vis_node *init_vis_node(float x_in, float y_in, int capacity) {
+  static int node_id_gen = 0;
+  node_id_gen++;
+  printf("Generating node %d (%.1f, %.1f)\n", node_id_gen, x_in, y_in);
+  struct vis_node ret = {0, capacity, calloc(capacity, sizeof(struct vis_node*)), calloc(capacity, sizeof(int)), x_in, y_in, node_id_gen, UNVISITED};
+  struct vis_node *ptr = (struct vis_node*)calloc(1, sizeof(struct vis_node));
+  memcpy(ptr, &ret, sizeof(ret));
+  return ptr;
+}
+
+//return:
+//1 if the neighbor was successfully added
+//0 if it was not successfully added
+//-1 if it was already a neighbor
+int add_neighbor(struct vis_node *node, struct vis_node *new_neighbor, int weight) {
+  //make sure we don't add the same neighbor twice
+  for(int i = 0; i < node->num_neighbors; i++) {
+    if(node->neighbors[i]->x == new_neighbor->x &&
+       node->neighbors[i]->y == new_neighbor->y) {
+      return -1;
+    }
+  }
+  //add the neighbor and return "true" if possible
+  if(node->num_neighbors < node->capacity) {
+    node->neighbors[node->num_neighbors] = new_neighbor;
+    node->weights[node->num_neighbors] = weight;
+    node->num_neighbors++;
+    return 1;
+  }
+  //return "false" if unable to add the new neighbor
+  return 0;
+}
+
+int is_visible(struct vis_node *p1, struct vis_node *p2, int num_bzs, struct vis_node ***bzs, int *bz_sizes) {
+  float ipx, ipy;
+  for(int i = 0; i < num_bzs; i++) {
+    for(int j = 0; j < bz_sizes[i]; j++) {
+      if (intersect_two_lines_absolute(&ipx, &ipy,
+				      p1->x, p1->y, p2->x, p2->y,
+				      bzs[i][j]->x, bzs[i][j]->y,
+				      bzs[i][(j+1)%(bz_sizes[i])]->x,
+				       bzs[i][(j+1)%(bz_sizes[i])]->y)) {
+	printf("(%.1f, %.1f) is not visible from (%.1f, %.1f)\n", p2->x, p2->y, p1->x, p1->y);
+	return 0;
+      }
+    }
+  }
+  printf("(%.1f, %.1f) is visible from (%.1f, %.1f)\n", p2->x, p2->y, p1->x, p1->y);
+  return 1;
+}
+
+int num_nodes;
+struct vis_node **nodes;
+
+//Create the visibility graph.
+//I don't think I even need to pass in the waypoints.
+//Use the variable "waypoints" from common_nav.h along with NB_WAYPOINT for the count
+struct vis_node *create_visibility_graph(int num_nfzs, struct point **nfzs, int *nfz_sizes) {
+  printf("Creating a visibility graph\n");
+  //Before even creating any points, need to filter the waypoints
+  int non_nfz_wp_ct = 0;
+  struct point non_nfz_wps[NB_WAYPOINT];
+  /* num_nodes = NB_WAYPOINT; */
+  /* nodes = calloc(num_nodes, sizeof(struct vis_node*)); */
+  /* int which_node = 0; */
+  for(int i = 0; i < NB_WAYPOINT; i++) {
+    printf("waypoints[%d] = (%.1f, %.1f)\n", i, waypoints[i].x, waypoints[i].y);
+    int on_nfz_border = 0;
+    for(int j = 0; j < num_nfzs; j++) {
+      for(int k = 0; k < nfz_sizes[j]; k++) {
+	if((nfzs[j][k].x == waypoints[i].x) && (nfzs[j][k].y == waypoints[i].y)) {
+	  on_nfz_border = 1;
+	  break;
+	}
+      }
+    }
+    if(!on_nfz_border) {
+      printf("Waypoint %d is not on a no-fly-zone border!\n", i);
+      non_nfz_wps[non_nfz_wp_ct].x = waypoints[i].x;
+      non_nfz_wps[non_nfz_wp_ct].y = waypoints[i].y;
+      non_nfz_wp_ct++;
+    }
+  }
+  printf("Made an array of all %d waypoints not on no-fly-zone borders\n", non_nfz_wp_ct);
+  //first, add home - need a reference point
+  struct vis_node *home = init_vis_node(waypoints[WP_HOME].x, waypoints[WP_HOME].y, NB_WAYPOINT-1);
+  /* nodes[which_node] = home; */
+  /* which_node++; */
+  //struct vis_node *current = home;
+  struct vis_node ***buffer_zones = (struct vis_node***)calloc(num_nfzs, sizeof(struct vis_node**));
+  //now, create a representation of each no-fly zone's buffer zone
+  printf("Creating representation of buffer zones\n");
+  for(int i = 0; i < num_nfzs; i++) {
+    coords *bfz = buffer_zone(nfz_sizes[i], nfzs[i]);
+    buffer_zones[i] = (struct vis_node**)calloc(nfz_sizes[i], sizeof(struct vis_node*));
+    printf("Creating nodes for buffer zone #%d\n", i);
+    //create the nodes for the buffer zone vertices
+    for(int j = 0; j < nfz_sizes[i]; j++) {
+      buffer_zones[i][j] = init_vis_node(bfz[j][0], bfz[j][1], NB_WAYPOINT - nfz_sizes[i] + 2);
+      /*nodes[which_node] = buffer_zones[i][j];
+	which_node++;*/
+    }
+    //connect them
+    printf("Connecting all %d vertices of buffer zone #%d\n", nfz_sizes[i], i);
+    for(int j = 0; j < nfz_sizes[i]; j++) {
+      printf("Connecting indices %d and %d\n", j, (j+1) % (nfz_sizes[i]));
+      if(add_neighbor(buffer_zones[i][j], buffer_zones[i][(j+1)%(nfz_sizes[i])], 1) &&
+	 add_neighbor(buffer_zones[i][(j+1)%(nfz_sizes[i])], buffer_zones[i][j], 1)) {
+	//successfully connected this vertex with the next; carry on
+      }
+      else {
+	printf("ERROR: Failed to connect no-fly zone %d", i);
+	return NULL;
+      }
+    }
+  }
+  printf("Connecting all the no-fly-zones to each other\n");
+  //now, connect all the no-fly zones to each other
+  for(int i = 0; i < num_nfzs; i++) {
+    for(int j = 0; j < nfz_sizes[i]; j++) {
+      for(int k = 0; k < num_nfzs; k++) {
+	if(k == i) continue;
+	for(int l = 0; l < nfz_sizes[k]; l++) {
+	  if(is_visible(buffer_zones[i][j], buffer_zones[k][l], num_nfzs, buffer_zones, nfz_sizes)) {
+	    //don't need to add both ways here since it'll be done by the loops
+	    add_neighbor(buffer_zones[i][j], buffer_zones[k][l], 0);
+	  }
+	}
+      }
+    }
+  }
+  printf("Connecting all no-fly-zones to home\n");
+  for(int i = 0; i < num_nfzs; i++) {
+    for(int j = 0; j < nfz_sizes[i]; j++) {
+      if(is_visible(home, buffer_zones[i][j], num_nfzs, buffer_zones, nfz_sizes)) {
+	printf("Adding neighbor to home: (%.1f, %.1f)\n", buffer_zones[i][j]->x, buffer_zones[i][j]->y);
+	add_neighbor(buffer_zones[i][j], home, 0);
+	add_neighbor(home, buffer_zones[i][j], 0);
+      }
+    }
+  }
+  printf("Connected home to %d waypoints on buffer zones\n", home->num_neighbors);
+  printf("Adding other waypoints to the graph\n");
+  //finally, add all the other waypoints to the graph
+  struct vis_node **wp_nodes = (struct vis_node**)calloc(non_nfz_wp_ct, sizeof(struct vis_node*));
+  for(int i = 0; i < non_nfz_wp_ct; i++) {
+    printf("i = %d\n", i);
+    //if it's home, skip
+    if((non_nfz_wps[i].x == waypoints[WP_HOME].x) && (non_nfz_wps[i].y == waypoints[WP_HOME].y)) {
+      printf("Index %d is home wp, which has already been created.\n", i);
+      continue;
+    }
+    printf("Initializing non-NFZ node %d: (%.1f, %.1f)\n", i, non_nfz_wps[i].x, non_nfz_wps[i].y);
+    wp_nodes[i] = init_vis_node(non_nfz_wps[i].x, non_nfz_wps[i].y, NB_WAYPOINT-1);
+    /* nodes[which_node] = wp_nodes[i]; */
+    /* which_node++; */
+    //connect to home if appropriate
+    if(is_visible(home, wp_nodes[i], num_nfzs, buffer_zones, nfz_sizes)) {
+      add_neighbor(home, wp_nodes[i], 0);
+      add_neighbor(wp_nodes[i], home, 0);
+    }
+    //next, check against all the buffer zones
+    printf("Checking wp #%d (%.1f, %.1f) against all buffer zones\n", i, wp_nodes[i]->x, wp_nodes[i]->y);
+    for(int j = 0; j < num_nfzs; j++) {
+      for(int k = 0; k < nfz_sizes[j]; k++) {
+	if(is_visible(wp_nodes[i], buffer_zones[j][k], num_nfzs, buffer_zones, nfz_sizes)) {
+	  printf("Adding neighbor (%.1f, %.1f)\n", buffer_zones[j][k]->x, buffer_zones[j][k]->y);
+	  add_neighbor(wp_nodes[i], buffer_zones[j][k], 0);
+	  add_neighbor(buffer_zones[j][k], wp_nodes[i], 0);
+	}
+      }
+    }
+    //have to check against all other waypoints too
+    printf("Checking for visible previously added non-NFZ wps\n");
+    for(int j = 0; j < i; j++) {
+      //if it's home, skip
+      if((non_nfz_wps[j].x == waypoints[WP_HOME].x) && (non_nfz_wps[j].y == waypoints[WP_HOME].y)) {
+	printf("Index %d is home wp, which has already been checked.\n", j);
+	continue;
+      }
+      if(is_visible(wp_nodes[i], wp_nodes[j], num_nfzs, buffer_zones, nfz_sizes)) {
+	printf("Adding neighbor (%.1f, %.1f)\n", wp_nodes[j]->x, wp_nodes[j]->y);
+	add_neighbor(wp_nodes[i], wp_nodes[j], 0);
+	add_neighbor(wp_nodes[j], wp_nodes[i], 0);
+      }
+    }
+  }
+  printf("Successfully created visibility graph\n");
+  //now print all the neighbors
+  /* printf("Printing all neigbors without a graph traversal\n"); */
+  /* for(int i = 0; i < num_nodes; i++) { */
+  /*   printf("Node %d (%.1f, %.1f) connected to:"); */
+  /*   for(int j = 0; j < nodes[i]->num_neighbors; j++) { */
+  /*     printf(" (%.1f, %.1f)", nodes[i]->neighbors[j]->x, nodes[i]->neighbors[j]->y); */
+  /*   } */
+  /*   if(nodes[i]->num_neighbors == 0) { */
+  /*     printf("Nothing!\n"); */
+  /*   } */
+  /* } */
+  /* printf("Done\n"); */
+  return home;
+}
+
+//depth-first traversal
+void print_visibility_graph(struct vis_node *home, int depth) {
+  home->status = VISITING;
+  if(0 == home->num_neighbors) {
+    printf("Depth %d: Node %d has no neighbors.\n", depth, home->node_id);
+  }
+  else if(1 == home->num_neighbors) {
+    printf("Depth %d: Node %d has one neighbor: %d(%.1f, %.1f)\n", depth, home->node_id, home->neighbors[0]->node_id, home->neighbors[0]->x, home->neighbors[0]->y);
+  }
+  else {
+    printf("Depth %d: Node %d (%.1f, %.1f) has %d neighbors: ", depth, home->node_id, home->x, home->y, home->num_neighbors);
+    for(int i = 0; i < home->num_neighbors; i++) {
+      printf("%d(%.1f, %.1f)%s", home->neighbors[i]->node_id, home->neighbors[i]->x, home->neighbors[i]->y, ((home->num_neighbors == i+1)?("\n"):(", ")));
+    }
+  }
+  for(int i = 0; i < home->num_neighbors; i++) {
+    if(UNVISITED == home->neighbors[i]->status) {
+      print_visibility_graph(home->neighbors[i], depth+1);
+    }
+  }
+  home->status = VISITED;
 }
 
 /*end for no-fly zones*/

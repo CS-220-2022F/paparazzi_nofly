@@ -843,8 +843,15 @@ let print_update_occgrid = fun out ->
   right();
   lprintf out "for(j = -center; j <= center; j++) {\n" ;
   right();
-  let add_args = fun x -> sprintf "%s(center+i,center+j)" x in
-  lprintf out "occupancy_grid[i][j] = (center*center < i*i + j*j) || %s;\n" (String.concat " || " (List.map add_args !nfzs_list));
+  printf "\n%s\n" "No-fly zones:";
+  List.iter (fun x -> (printf "%s\n" x)) !nfzs_list;
+  let add_args = fun x -> sprintf "%s(i,j)" x in
+  lprintf out "occupancy_grid[center+i][center+j] = (center*center < i*i + j*j)";
+  List.iter (fprintf out " || %s") (List.map add_args !nfzs_list);
+  fprintf out "%s\n" ";";
+  printf "occupancy_grid[center+i][center+j] = ";
+  List.iter (printf " || %s") (List.map add_args !nfzs_list);
+  printf "\n";
   left();
   lprintf out "}\n";
   left();
@@ -867,6 +874,23 @@ let parse_wpt_sector = fun indexes waypoints xml ->
         Not_found -> failwith (sprintf "Error: corner '%s' of sector '%s' not found" name sector_name)
   in
   (sector_name, List.map p2D_of (Xml.children xml))
+
+let round_tenth = fun x -> (Float.round (x *. 10.)) /. 10.
+
+let filter_nfz = fun wps nfz ->
+  let get_second (_,a) = a in
+  let nfz_pts = List.map get_second nfz in
+  let reg_coords p = ((round_tenth p.G2D.x2D), (round_tenth p.G2D.y2D)) in
+  let nfz_reg_coords = List.map reg_coords nfz_pts in
+  let pts_eql (x1,y1) (x2,y2) = (x1 == x2) && (y1 == y2) in
+  let not_in_nfz pt = None == List.find_opt (pts_eql pt) nfz_reg_coords in
+  List.filter not_in_nfz wps
+
+let filter_all_nfzs = fun wps nfzs ->
+  let wps_coords = List.map (fun wp -> (float_attrib wp "x", float_attrib wp "y")) wps in
+  let nfzs_coalesced = List.fold_left List.append [] nfzs in
+  filter_nfz wps_coords nfzs_coalesced
+  
 
 let print_approaching_nfz = fun out t (s, pts) ->
   lprintf out "static inline bool approaching%s() {\n" (Compat.capitalize_ascii s);
@@ -892,7 +916,8 @@ let print_go_around_nfz = fun out t (s,pts) ->
   List.iteri (fun i str -> if (i+1) < (List.length pts) then fprintf out "%s," str else fprintf out "%s};\n" str) string_of_nfz;
   (* Need to find a way to get the eventual goal point. *)
   lprintf out "//TODO Work in progress\n";
-  lprintf out "float angle = get_angle({GetPosX(), GetPosY()}, {waypoints[goal_wp].x, waypoints[goal_wp].y}, %d, &(nfz[0]));\n" (List.length pts);
+  lprintf out "coords currpos = {GetPosX(), GetPosY()}, goalpos = {waypoints[goal_wp].x, waypoints[goal_wp].y};\n";
+  lprintf out "float angle = get_angle(currpos, goalpos, %d, &(nfz[0]));\n" (List.length pts);
   lprintf out "float *ctrd = centroid(%d, &(nfz[0]));\n" (List.length pts);
   lprintf out "int furthest_idx = 0;\n";
   lprintf out "float max_dist = sqrt(pow(nfz[0][0] - ctrd[0], 2) + pow(nfz[0][1] - ctrd[1], 2));\n";
@@ -994,7 +1019,7 @@ let print_var_impl out abi_msgs = function
       lprintf out "static abi_event FP_%s_ev;\n" n
   | _ -> ()
 
-let print_auto_init_bindings = fun out abi_msgs variables ->
+let print_auto_init_bindings = fun out abi_msgs variables iow wpts nfzs ->
   let print_cb = function
     | FP_binding (n, Some vs, _, None) ->
         let field_types = Hashtbl.find abi_msgs n in
@@ -1019,7 +1044,23 @@ let print_auto_init_bindings = fun out abi_msgs variables ->
   in
   List.iter print_cb variables;
   lprintf out "static inline void auto_nav_init(void) {\n";
+  right();
   List.iter print_bindings variables;
+  let nfz_sizes = List.map List.length nfzs in
+  lprintf out "int nfz_sizes[%d] = {%s};\n" (List.length nfz_sizes) (String.concat "," (List.map (sprintf "%d") nfz_sizes));
+  let print_coords = fun (x,y) -> sprintf "{%.1ff, %.1ff, NAV_DEFAULT_ALT}" x y in
+  let get_second (_,a) = a in
+  let reg_coords p = (p.G2D.x2D, p.G2D.y2D) in
+  let nfz_to_str nfz = String.concat "," (List.map print_coords (List.map reg_coords (List.map get_second nfz))) in
+  let nfzs_as_strs = List.map nfz_to_str nfzs in
+  let print_arr_nfz index nfz_str = lprintf out "struct point nfz%d[] = {%s};\n" index nfz_str in
+  List.iteri print_arr_nfz nfzs_as_strs;
+  lprintf out "struct point *nfz_borders[] = {";
+  List.iteri (fun i str -> fprintf out "%snfz%d" (if i==0 then "" else ",") i) nfzs_as_strs;
+  fprintf out "};\n";
+  lprintf out "HOME_NODE = create_visibility_graph(%d, nfz_borders, nfz_sizes);\n" (List.length nfzs_as_strs);
+  lprintf out "print_visibility_graph(HOME_NODE, 0);\n";
+  left();
   lprintf out "}\n\n"
 
 (**
@@ -1047,6 +1088,7 @@ let print_flight_plan_h = fun xml utm0 xml_file out_file ->
   fprintf out "#include \"generated/modules.h\"\n";
   fprintf out "#include \"subsystems/abi.h\"\n";
   fprintf out "#include \"autopilot.h\"\n\n";
+  fprintf out "#include <stdio.h>\n\n";
   (* print variables and ABI bindings declaration *)
 
   let variables = parse_variables variables in
@@ -1191,38 +1233,45 @@ let print_flight_plan_h = fun xml utm0 xml_file out_file ->
   (* print variables and ABI initialization *)
   List.iter (fun v -> print_var_impl out abi_msgs v) variables;
   lprintf out "\n";
-  print_auto_init_bindings out abi_msgs variables;
 
-  let center = int_of_float (ceil mdfh) in
+  (* let center = int_of_float (ceil mdfh) in
   let arr_size = 2 * center + 1 in
   lprintf out "int occupancy_grid[%d][%d];\n" arr_size arr_size;
-  lprintf out "const int center = %d;\n" center;
+  lprintf out "const int center = %d;\n\n" center;
+  lprintf out "static inline void update_occgrid(void);\n\n"; *)
+  lprintf out "struct vis_node *HOME_NODE;\n\n";
+
 
   (* index of waypoints *)
   let index_of_waypoints =
     let i = ref (-1) in
     List.map (fun w -> incr i; (name_of w, !i)) waypoints in
+		  
+  let sectors_element = try ExtXml.child xml "sectors" with Not_found -> Xml.Element ("", [], []) in
+  let noflyzones = List.filter (fun x -> Compat.lowercase_ascii (Xml.tag x) = "noflyzone") (Xml.children sectors_element) in
+  let get_second (_,a) = a in
+  let nfzs = List.map (parse_wpt_sector index_of_waypoints waypoints) noflyzones in
+  print_auto_init_bindings out abi_msgs variables index_of_waypoints waypoints (List.map get_second nfzs);
 
   (* print sectors *)
-  let sectors_element = try ExtXml.child xml "sectors" with Not_found -> Xml.Element ("", [], []) in
+  
   let sectors = List.filter (fun x -> Compat.lowercase_ascii (Xml.tag x) = "sector") (Xml.children sectors_element) in
   let sectors_type = List.map (fun x -> match ExtXml.attrib_or_default x "type" "static" with "dynamic" -> DynamicSector | _ -> StaticSector) sectors in
   let sectors = List.map (parse_wpt_sector index_of_waypoints waypoints) sectors in
   List.iter2 (print_inside_sector out) sectors_type sectors;
 
-let noflyzones = List.filter (fun x -> Compat.lowercase_ascii (Xml.tag x) = "noflyzone") (Xml.children sectors_element) in
+
   let sectors_type = List.map (fun x -> match ExtXml.attrib_or_default x "type" "static" with "dynamic" -> DynamicSector | _ -> StaticSector) noflyzones in
-  let nfzs = List.map (parse_wpt_sector index_of_waypoints waypoints) noflyzones in
   List.iter2 (print_inside_nfz out) sectors_type nfzs;
-  print_update_occgrid out;
-  (* List.iter2 (print_approaching_nfz out) sectors_type nfzs; *)
-  (* List.iter2 (print_go_around_nfz out) sectors_type nfzs; *)
+  (* print_update_occgrid out; *)
+  List.iter2 (print_approaching_nfz out) sectors_type nfzs;
+  List.iter2 (print_go_around_nfz out) sectors_type nfzs;
 
 
   (* print main flight plan state machine *)
   lprintf out "\nstatic inline void auto_nav(void) {\n";
-  (* right ();
-  List.iter (fun x -> print_check_nfz out (Compat.capitalize_ascii (ExtXml.attrib x "name")) index_of_waypoints)) noflyzones;
+  right ();
+  (* List.iter (fun x -> print_check_nfz out (Compat.capitalize_ascii (ExtXml.attrib x "name")) index_of_waypoints)) noflyzones;
   left(); *)
   List.iter (print_exception out) global_exceptions;
   lprintf out "switch (nav_block) {\n";
