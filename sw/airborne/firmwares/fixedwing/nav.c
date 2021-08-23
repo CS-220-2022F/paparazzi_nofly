@@ -26,6 +26,7 @@
  */
 
 #include <math.h>
+#include <float.h>
 #include "std.h"
 
 static unit_t unit __attribute__((unused));
@@ -842,18 +843,45 @@ int intersect_two_lines(float *x_i, float *y_i, float ax0, float ay0, float ax1,
 
 //same as above, but will NOT give any wiggle room
 int intersect_two_lines_absolute(float *x_i, float *y_i, float ax0, float ay0, float ax1, float ay1, float bx0, float by0, float bx1, float by1) {
-  float divider, fac0, fac1;
+  printf("Checking if line segment from (%.1f, %.1f) to (%.1f, %.1f) intersects with line segment from (%.1f, %.1f) to (%.1f, %.1f)\n", ax0, ay0, ax1, ay1, bx0, by0, bx1, by1);
+  printf("First checking that the slopes are not the same\n");
+  float mb = (by1 - by0) / (bx1 - bx0), ma = (ay1 - ay0) / (ax1 - ax0);
+  if(ma == mb) {
+    printf("The lines are parallel!\n");
+    return 0;
+  }
+  printf("The lines are not parallel. Continuing.\n");
+  /*float divider, fac0, fac1;
   divider = (((by1 - by0) * (ax1 - ax0)) + ((ay0 - ay1) * (bx1 - bx0)));
   if (divider == 0) { return 0; }
   fac0 = ((ax1 * (ay0 - by0)) + (ax0 * (by0 - ay1)) + (bx0 * (ay1 - ay0))) / divider;
+  printf("fac0 == %.3f\n", fac0);
   if ((fac0 >= 1.0) || (fac0 <= 0.0))  return 0; 
 
   fac1 = ((bx1 * (by0 - ay0)) + (bx0 * (ay0 - by1)) + (ax0 * (by1 - by0))) / divider;
+  printf("fac1 == %.3f\n", fac1);
   if((fac1 <= 0.0) || (fac1 >= 1.0)) return 0;
   
   *x_i = bx0 + fac0 * (bx1 - bx0);
   *y_i = by0 + fac0 * (by1 - by0);
-  
+  printf("Intersection point is (%.1f, %.1f)\n", *x_i, *y_i);*/
+  float denom = (ay1 - ay0) * (bx1 - bx0) - (by1 - by0) * (ax1 - ax0);
+  float num_a = (by0 - ay0) * (bx1 - bx0) - (bx0 - ax0) * (by1 - by0);
+  float num_b = (by0 - ay0) * (ax1 - ax0) - (bx0 - ax0) * (ay1 - ay0);
+  float fac_a = num_a / denom, fac_b = num_b / denom;
+  printf("Intersection point would be %.1f%% of the way along the line segment from (%.1f, %.1f) to (%.1f, %.1f), %.1f%% of the way along the line segment from (%.1f, %.1f) to (%.1f, %.1f)\n", 100*fac_a, ax0, ay0, ax1, ay1, 100*fac_b, bx0, by0, bx1, by1);
+  if(fac_a <= 0 || fac_a >= 1) {
+    printf("Intersection point is not between (%.1f, %.1f) and (%.1f, %.1f)\n", ax0, ay0, ax1, ay1);
+    return 0;
+  }
+  if(fac_b <= 0 || fac_b >= 1) {
+    printf("Intersection point is between (%.1f, %.1f) and (%.1f, %.1f), but not between (%.1f, %.1f) and (%.1f, %.1f)\n", ax0, ay0, ax1, ay1, bx0, by0, bx1, by1);
+    return 0;
+  }
+
+  *x_i = ax0 + fac_a * (ax1 - ax0);
+  *y_i = ay0 + fac_a * (ay1 - ay0);
+    printf("Intersection point is between (%.1f, %.1f) and (%.1f, %.1f), and between (%.1f, %.1f) and (%.1f, %.1f). The line segments intersect at (%.1f, %.1f)!\n", ax0, ay0, ax1, ay1, bx0, by0, bx1, by1, *x_i, *y_i);
   return 1;
 }
 
@@ -941,6 +969,11 @@ struct vis_node {
   enum VISIT_STATUS status;
 };
 
+struct path_node {
+  struct vis_node *wp;
+  struct path_node *next;
+};
+
 struct vis_node *init_vis_node(float x_in, float y_in, int capacity) {
   static int node_id_gen = 0;
   node_id_gen++;
@@ -949,6 +982,16 @@ struct vis_node *init_vis_node(float x_in, float y_in, int capacity) {
   struct vis_node *ptr = (struct vis_node*)calloc(1, sizeof(struct vis_node));
   memcpy(ptr, &ret, sizeof(ret));
   return ptr;
+}
+
+struct path_node *init_path_node(struct vis_node *vn, struct path_node *prev) {
+  struct path_node *ret = calloc(1, sizeof(struct path_node));
+  if(NULL != prev) {
+    prev->next = ret;
+  }
+  ret->wp = vn;
+  ret->next = NULL;
+  return ret;
 }
 
 //return:
@@ -983,8 +1026,11 @@ int is_visible(struct vis_node *p1, struct vis_node *p2, int num_bzs, struct vis
 				      bzs[i][j]->x, bzs[i][j]->y,
 				      bzs[i][(j+1)%(bz_sizes[i])]->x,
 				       bzs[i][(j+1)%(bz_sizes[i])]->y)) {
-	printf("(%.1f, %.1f) is not visible from (%.1f, %.1f)\n", p2->x, p2->y, p1->x, p1->y);
+	printf("(%.1f, %.1f) is not visible from (%.1f, %.1f) because the no-fly zone edge from (%.1f, %.1f) to (%.1f, %.1f) is in the way\n", p2->x, p2->y, p1->x, p1->y, bzs[i][j]->x, bzs[i][j]->y, bzs[i][(j+1)%(bz_sizes[i])]->x, bzs[i][(j+1)%(bz_sizes[i])]->y);
 	return 0;
+      }
+      else {
+	printf("The no-fly zone edge from (%.1f, %.1f) to (%.1f, %.1f) does not interfere with the line segment from (%.1f, %.1f) to (%.1f, %.1f)\n", bzs[i][j]->x, bzs[i][j]->y, bzs[i][(j+1)%(bz_sizes[i])]->x, bzs[i][(j+1)%(bz_sizes[i])]->y, p2->x, p2->y, p1->x, p1->y);
       }
     }
   }
@@ -1129,19 +1175,18 @@ struct vis_node *create_visibility_graph(int num_nfzs, struct point **nfzs, int 
     }
   }
   printf("Successfully created visibility graph\n");
-  //now print all the neighbors
-  /* printf("Printing all neigbors without a graph traversal\n"); */
-  /* for(int i = 0; i < num_nodes; i++) { */
-  /*   printf("Node %d (%.1f, %.1f) connected to:"); */
-  /*   for(int j = 0; j < nodes[i]->num_neighbors; j++) { */
-  /*     printf(" (%.1f, %.1f)", nodes[i]->neighbors[j]->x, nodes[i]->neighbors[j]->y); */
-  /*   } */
-  /*   if(nodes[i]->num_neighbors == 0) { */
-  /*     printf("Nothing!\n"); */
-  /*   } */
-  /* } */
-  /* printf("Done\n"); */
   return home;
+}
+
+//resetting visit status, depth-first
+void reset_visit_statuses(struct vis_node *home) {
+  home->status = VISITING;
+  for(int i = 0; i < home->num_neighbors; i++) {
+    if(VISITED == home->neighbors[i]->status) {
+      reset_visit_statuses(home->neighbors[i]);
+    }
+  }
+  home->status = UNVISITED;
 }
 
 //depth-first traversal
@@ -1165,6 +1210,104 @@ void print_visibility_graph(struct vis_node *home, int depth) {
     }
   }
   home->status = VISITED;
+  //make sure the state changes back so we can traverse the graph again
+  if(0 == depth) {
+    reset_visit_statuses(home);
+  }
 }
+
+struct vis_node *best_neighbor(struct vis_node *current, struct vis_node *dest) {
+  float min_dist = FLT_MAX;
+  struct vis_node *ret = NULL;
+  for(int i = 0; i < current->num_neighbors; i++) {
+    float cur_dist = sqrt(DistanceSquare(current->x, current->y, current->neighbors[i]->x, current->neighbors[i]->y)) + sqrt(DistanceSquare(dest->x, dest->y, current->neighbors[i]->x, current->neighbors[i]->y));
+    if(min_dist > cur_dist) {
+      min_dist = cur_dist;
+      ret = current->neighbors[i];
+    }
+  }
+  return ret;
+}
+
+struct vis_node *best_neighbor_xy(struct vis_node *current, float dest_x, float dest_y) {
+  float min_dist = FLT_MAX;
+  struct vis_node *ret = NULL;
+  for(int i = 0; i < current->num_neighbors; i++) {
+    float cur_dist = sqrt(DistanceSquare(current->x, current->y, current->neighbors[i]->x, current->neighbors[i]->y)) + sqrt(DistanceSquare(dest_x, dest_y, current->neighbors[i]->x, current->neighbors[i]->y));
+    if(min_dist > cur_dist) {
+      min_dist = cur_dist;
+      ret = current->neighbors[i];
+    }
+  }
+  return ret;
+}
+
+struct vis_node *closest_node(struct vis_node *home, float target_x, float target_y) {
+  if(home->x == target_x && home->y == target_y) {
+    return home;
+  }
+  struct vis_node *current = home;
+  //if we return to a previously visited node, we've probably found the closest one
+  while(VISITED != current->status) {
+    printf("Currently evaluating (%.1f, %.1f)\n", current->x, current->y);
+    current->status = VISITED;
+    struct vis_node *next = best_neighbor_xy(current, target_x, target_y);
+    //determine which is closest between these two
+    if(VISITED == next->status) {
+      if(DistanceSquare(next->x, next->y, target_x, target_y) <= DistanceSquare(current->x, current->y, target_x, target_y)) {
+	current = next;
+      }
+    }
+    else {
+      current = next;
+    }
+  }
+  reset_visit_statuses(home);
+  return current;
+}
+
+struct path_node *greedy_path(struct vis_node * const start, struct vis_node * const target) {
+  struct path_node *first_wp = init_path_node(start, NULL);
+  struct path_node *cur = first_wp;
+  while(target != cur->wp) {
+    struct vis_node *next = best_neighbor(cur->wp, target);
+    cur = init_path_node(next, cur);
+  }
+  return first_wp;
+}
+
+struct path_node *greedy_path_xy(struct vis_node *const home, float start_x, float start_y, float end_x, float end_y) {
+  struct vis_node *start_node = closest_node(home, start_x, start_y),
+    *end_node = closest_node(home, end_x, end_y);
+  return greedy_path(start_node, end_node);
+}
+
+void print_path(struct path_node *start) {
+  printf("Calculated path:");
+  for(struct path_node *cur = start; NULL != cur; cur = cur->next) {
+    printf(" %d(%.1f, %.1f)", cur->wp->node_id, cur->wp->x, cur->wp->y);
+  }
+  printf("\n");
+}
+
+bool nav_path(struct path_node *start_node) {
+  if(nav_approaching_xy(start_node->next->wp->x,
+			start_node->next->wp->y,
+			start_node->wp->x,
+			start_node->wp->y, CARROT)) {
+    return true;
+  }
+  nav_route_xy(start_node->wp->x, start_node->wp->y,
+	       start_node->next->wp->x, start_node->next->wp->y);
+  return false;
+}
+
+void free_path(struct path_node *start_node) {
+  if(start_node) {
+    free_path(start_node->next);
+    free(start_node);
+  }
+}
+
 
 /*end for no-fly zones*/

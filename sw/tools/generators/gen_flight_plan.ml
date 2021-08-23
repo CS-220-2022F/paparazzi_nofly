@@ -1060,6 +1060,21 @@ let print_auto_init_bindings = fun out abi_msgs variables iow wpts nfzs ->
   fprintf out "};\n";
   lprintf out "HOME_NODE = create_visibility_graph(%d, nfz_borders, nfz_sizes);\n" (List.length nfzs_as_strs);
   lprintf out "print_visibility_graph(HOME_NODE, 0);\n";
+  lprintf out "struct vis_node *DEST_NODE = closest_node(HOME_NODE, 30.0, 30.0);\n";
+  lprintf out "if(NULL == DEST_NODE) {\n";
+  right();
+  lprintf out "printf(\"Error: could not find a node near (30,30)\\n\");";
+  left();
+  lprintf out "}";
+  lprintf out "else {\n";
+  right();
+  lprintf out "struct path_node *start_to_dest = greedy_path(HOME_NODE, DEST_NODE);\n";
+  lprintf out "print_path(start_to_dest);\n";
+  left();
+  lprintf out "}\n";
+  lprintf out "struct vis_node *e4 = closest_node(HOME_NODE, -23.0, -10.0);\n";
+  lprintf out "struct path_node *dest_to_e4 = greedy_path(DEST_NODE, e4);\n";
+  lprintf out "print_path(dest_to_e4);\n";
   left();
   lprintf out "}\n\n"
 

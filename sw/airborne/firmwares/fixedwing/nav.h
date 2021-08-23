@@ -163,6 +163,26 @@ extern void nav_route_xy(float last_wp_x, float last_wp_y, float wp_x, float wp_
 #define NavSegment(_start, _end) \
   nav_route_xy(waypoints[_start].x, waypoints[_start].y, waypoints[_end].x, waypoints[_end].y)
 
+/* Possibly change the above to this for navigating around the NFZ
+#define NavSegment(_start, _end) \
+  do { \
+  	if(NavApproaching(_start, CARROT) { \
+  		struct vis_node *start_node = closest_node(HOME_NODE, waypoints[_start].x, waypoints[_start].y); \
+  		struct vis_node *end_node = closest_node(HOME_NODE, waypoints[_end].x, waypoints[_end].y); \
+  		free_path(PATH_START); \
+  		PATH_START = greedy_path(start_node, end_node); \
+  		CURR_NODE =  PATH_START; \
+  	} \
+  	else if(NULL == CURR_NODE) { \
+  	} \
+  	else { \
+  		if(nav_path(CURR_NODE)) { \
+  			CURR_NODE = CURR_NODE->next; \
+  		} \
+  	} \
+  } while(0)
+ */
+
 bool nav_approaching_xy(float x, float y, float from_x, float from_y, float approaching_time);
 #define NavApproaching(wp, time) nav_approaching_xy(waypoints[wp].x, waypoints[wp].y, last_x, last_y, time)
 #define NavApproachingFrom(wp, from, time) nav_approaching_xy(waypoints[wp].x, waypoints[wp].y, waypoints[from].x, waypoints[from].y, time)
@@ -267,6 +287,7 @@ extern float get_angle(coords p0, coords p1, int num_verts, coords *verts);
 extern coords *buffer_zone(int num_verts, struct point *verts);
 
 struct vis_node;
+struct path_node;
 
 extern int num_nodes;
 extern struct vis_node **nodes;
@@ -276,6 +297,18 @@ extern int add_neighbor(struct vis_node *node, struct vis_node *new_neighbor, in
 extern struct vis_node *create_visibility_graph(int num_nfzs, struct point **nfzs, int *nfz_sizes);
 
 extern void print_visibility_graph(struct vis_node *home, int depth);
+
+struct vis_node *closest_node(struct vis_node *home, float target_x, float target_y);
+
+extern struct path_node *greedy_path(struct vis_node *const start, struct vis_node *const target);
+
+extern struct path_node *greedy_path_xy(struct vis_node *const home, float start_x, float start_y, float end_x, float end_y);
+
+extern void print_path(struct path_node *start);
+
+extern bool nav_path(struct path_node *start_node);
+
+extern void free_path(struct path_node *start_node);
 
   /*end for no-fly zones*/
 
