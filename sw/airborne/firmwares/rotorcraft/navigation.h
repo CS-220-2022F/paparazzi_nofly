@@ -42,6 +42,8 @@
 
 #define NAV_FREQ 16
 
+extern struct vis_node *HOME_NODE;
+
 extern struct EnuCoor_i navigation_target;
 extern struct EnuCoor_i navigation_carrot;
 

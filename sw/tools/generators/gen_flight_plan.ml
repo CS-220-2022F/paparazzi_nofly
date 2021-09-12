@@ -177,7 +177,7 @@ let print_exception = fun out x ->
   let i = get_index_block (ExtXml.attrib x "deroute") in
   begin
   try
-    let f =  ExtXml.attrib x "exec" in
+   let f =  ExtXml.attrib x "exec" in
     lprintf out "if ((nav_block != %d) && %s) {%s; GotoBlock(%d); return; }\n" i c f i
   with
     ExtXml.Error _ -> (
@@ -1059,7 +1059,7 @@ let print_auto_init_bindings = fun out abi_msgs variables iow wpts nfzs ->
   List.iteri (fun i str -> fprintf out "%snfz%d" (if i==0 then "" else ",") i) nfzs_as_strs;
   fprintf out "};\n";
   lprintf out "HOME_NODE = create_visibility_graph(%d, nfz_borders, nfz_sizes);\n" (List.length nfzs_as_strs);
-  lprintf out "print_visibility_graph(HOME_NODE, 0);\n";
+  (* lprintf out "print_visibility_graph(HOME_NODE, 0);\n";
   lprintf out "struct vis_node *DEST_NODE = closest_node(HOME_NODE, 30.0, 30.0);\n";
   lprintf out "if(NULL == DEST_NODE) {\n";
   right();
@@ -1074,7 +1074,7 @@ let print_auto_init_bindings = fun out abi_msgs variables iow wpts nfzs ->
   lprintf out "}\n";
   lprintf out "struct vis_node *e4 = closest_node(HOME_NODE, -23.0, -10.0);\n";
   lprintf out "struct path_node *dest_to_e4 = greedy_path(DEST_NODE, e4);\n";
-  lprintf out "print_path(dest_to_e4);\n";
+  lprintf out "print_path(dest_to_e4);\n"; *)
   left();
   lprintf out "}\n\n"
 
@@ -1254,8 +1254,27 @@ let print_flight_plan_h = fun xml utm0 xml_file out_file ->
   lprintf out "int occupancy_grid[%d][%d];\n" arr_size arr_size;
   lprintf out "const int center = %d;\n\n" center;
   lprintf out "static inline void update_occgrid(void);\n\n"; *)
+  lprintf out "enum VISIT_STATUS {UNVISITED, VISITING, VISITED};\n";
+  lprintf out "struct vis_node {\n";
+  right();
+  lprintf out "int num_neighbors;\n";
+  lprintf out "int capacity;\n";
+  lprintf out "struct vis_node **neighbors;\n";
+  lprintf out "int *weights;\n";
+  lprintf out "float x, y;\n";
+  lprintf out "int node_id;\n";
+  lprintf out "enum VISIT_STATUS status;\n";
+  left();
+  lprintf out "};\n";
   lprintf out "struct vis_node *HOME_NODE;\n\n";
-
+  lprintf out "struct path_node {\n";
+  right();
+  lprintf out "struct vis_node *wp;\n";
+  lprintf out "struct path_node *next;\n";
+  left();
+  lprintf out "};\n";
+  lprintf out "struct path_node *PATH_START = NULL, *CURR_NODE = NULL;\n\n";
+  lprintf out "bool path_calculated = false;\n\n";
 
   (* index of waypoints *)
   let index_of_waypoints =

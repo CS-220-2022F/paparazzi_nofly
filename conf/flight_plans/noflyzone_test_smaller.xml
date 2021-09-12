@@ -1,13 +1,13 @@
 <!DOCTYPE flight_plan SYSTEM "flight_plan.dtd">
 
-<flight_plan alt="600" ground_alt="380" lat0="37.2109800" lon0="-113.4567800" max_dist_from_home="50" name="NoFlyZoneTest" qfu="270" security_height="25">
+<flight_plan alt="600" ground_alt="380" lat0="37.2109800" lon0="-113.4567800" max_dist_from_home="100" name="NoFlyZoneTest" qfu="270" security_height="25">
   <header>
 
 </header>
   <waypoints>
     <waypoint name="HOME" x="0" y="0"/>
     <waypoint name="STDBY" x="0" y="-20"/>
-    <waypoint name="CLIMB" x="-114.5" y="162.3"/>
+    <waypoint name="CLIMB" x="-57.2" y="81.1"/>
     <waypoint name="c0" x="0" y="50"/>
     <waypoint name="c2" x="50" y="0"/>
     <waypoint name="c4" x="0" y="-50"/>
@@ -38,7 +38,7 @@
   </sectors>
   <blocks>
     <block name="GoThroughNoFlyZone">
-      <path wpts="HOME, STDBY, dest"/>
+      <go from="HOME" wp="dest"/>
     </block>
     <block name="GoHome">
       <go wp="HOME"/>

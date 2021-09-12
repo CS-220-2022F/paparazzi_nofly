@@ -78,6 +78,9 @@ extern uint8_t last_wp __attribute__((unused));
 
 extern float max_agl_m;
 
+extern struct vis_node *HOME_NODE;
+extern bool path_calculated;
+
 extern int nav_mode;
 #define NAV_MODE_ROLL 1
 #define NAV_MODE_COURSE 2
@@ -160,28 +163,47 @@ extern void nav_glide(uint8_t start_wp, uint8_t wp);
 
 /*********** Navigation along a line *************************************/
 extern void nav_route_xy(float last_wp_x, float last_wp_y, float wp_x, float wp_y);
-#define NavSegment(_start, _end) \
-  nav_route_xy(waypoints[_start].x, waypoints[_start].y, waypoints[_end].x, waypoints[_end].y)
+/*#define NavSegment(_start, _end)					\
+  nav_route_xy(waypoints[_start].x, waypoints[_start].y, waypoints[_end].x, waypoints[_end].y)*/
 
-/* Possibly change the above to this for navigating around the NFZ
-#define NavSegment(_start, _end) \
-  do { \
-  	if(NavApproaching(_start, CARROT) { \
-  		struct vis_node *start_node = closest_node(HOME_NODE, waypoints[_start].x, waypoints[_start].y); \
-  		struct vis_node *end_node = closest_node(HOME_NODE, waypoints[_end].x, waypoints[_end].y); \
-  		free_path(PATH_START); \
-  		PATH_START = greedy_path(start_node, end_node); \
-  		CURR_NODE =  PATH_START; \
-  	} \
-  	else if(NULL == CURR_NODE) { \
-  	} \
-  	else { \
-  		if(nav_path(CURR_NODE)) { \
-  			CURR_NODE = CURR_NODE->next; \
-  		} \
-  	} \
+//TODO fix the conditionals here
+#define NavSegment(_start, _end)					\
+  do {									\
+    if(NavApproaching(_start, CARROT)) {				\
+      printf("Approaching wp %d\n", _start);				\
+      if(!path_calculated) {						\
+	struct vis_node *start_node = closest_node(HOME_NODE, waypoints[_start].x, waypoints[_start].y); \
+	struct vis_node *end_node = closest_node(HOME_NODE, waypoints[_end].x, waypoints[_end].y); \
+	free_path(PATH_START);						\
+	PATH_START = greedy_path(start_node, end_node);			\
+	print_path(PATH_START);						\
+	CURR_NODE =  PATH_START;					\
+	path_calculated = true;						\
+      }									\
+      else {								\
+	if(nav_path(CURR_NODE)) {					\
+	  printf("Moving on from this leg\n");				\
+	  CURR_NODE = CURR_NODE->next;					\
+	}								\
+      }									\
+    }									\
+    else if(NULL == CURR_NODE) {					\
+      path_calculated = false;						\
+    }									\
+    else {								\
+      path_calculated = false;						\
+      printf("Navigating from (%.1f, %.1f) to (%.1f, %.1f)\n", CURR_NODE->wp->x, CURR_NODE->wp->y, CURR_NODE->next->wp->x, CURR_NODE->next->wp->y); \
+      if(nav_path(CURR_NODE)) {						\
+	printf("Moving on to the next leg\n");				\
+	CURR_NODE = CURR_NODE->next;					\
+	printf("Now navigating from (%.1f, %.1f) to (%.1f, %.1f)\n", CURR_NODE->wp->x, CURR_NODE->wp->y, CURR_NODE->next->wp->x, CURR_NODE->next->wp->y); \
+      }									\
+      else {								\
+	printf("Haven\'t yet reached (%.1f, %.1f)\n", CURR_NODE->next->wp->x, CURR_NODE->next->wp->y); \
+      }									\
+    }									\
   } while(0)
- */
+
 
 bool nav_approaching_xy(float x, float y, float from_x, float from_y, float approaching_time);
 #define NavApproaching(wp, time) nav_approaching_xy(waypoints[wp].x, waypoints[wp].y, last_x, last_y, time)

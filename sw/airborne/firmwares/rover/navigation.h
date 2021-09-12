@@ -77,6 +77,8 @@ typedef void (*nav_rover_circle)(struct EnuCoor_f *wp_center, float radius);
 typedef void (*nav_rover_oval_init)(void);
 typedef void (*nav_rover_oval)(struct EnuCoor_f *wp1, struct EnuCoor_f *wp2, float radius);
 
+extern struct vis_node *HOME_NODE;
+
 
 /** General Navigation structure
  */

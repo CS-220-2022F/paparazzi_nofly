@@ -33,6 +33,24 @@
 enum line_status { LR12, LQC21, LTC2, LQC22, LR21, LQC12, LTC1, LQC11 };
 static enum line_status line_status;
 
+enum VISIT_STATUS {UNVISITED, VISITING, VISITED};
+struct vis_node {
+  int num_neighbors;
+  int capacity;
+  struct vis_node **neighbors;
+  int *weights;
+  float x, y;
+  int node_id;
+  enum VISIT_STATUS status;
+};
+
+struct path_node {
+  struct vis_node *wp;
+  struct path_node *next;
+};
+
+struct path_node *PATH_START, *CURR_NODE;
+
 void nav_line_setup(void)
 {
   line_status = LR12;
