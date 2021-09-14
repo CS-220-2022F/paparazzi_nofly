@@ -386,7 +386,7 @@ void fly_to_xy(float x, float y)
  */
 void nav_route_xy(float last_wp_x, float last_wp_y, float wp_x, float wp_y)
 {
-  printf("nav_route_xy from (%.1f, %.1f) to (%.1f, %.1f)\n", last_wp_x, last_wp_y, wp_x, wp_y);
+  //printf("nav_route_xy from (%.1f, %.1f) to (%.1f, %.1f)\n", last_wp_x, last_wp_y, wp_x, wp_y);
   float leg_x = wp_x - last_wp_x;
   float leg_y = wp_y - last_wp_y;
   float leg2 = Max(leg_x * leg_x + leg_y * leg_y, 1.);
@@ -960,8 +960,8 @@ coords *buffer_zone(int num_verts, struct point *verts) {
   float *c = centroid(num_verts, verts_as_coords);
   coords *bz = (coords *)calloc(sizeof(coords), num_verts);
   for(int i = 0; i < num_verts; i++) {
-    bz[i][0] = c[0] + RATIO * 1000/area * (verts[i].x - c[0]);
-    bz[i][1] = c[1] + RATIO * 1000/area * (verts[i].y - c[1]);
+    bz[i][0] = c[0] + (1.1 + (RATIO - 1.1) * 1000/area) * (verts[i].x - c[0]);
+    bz[i][1] = c[1] + (1.1 + (RATIO - 1.1) * 1000/area) * (verts[i].y - c[1]);
   }
   return bz;
 }
@@ -1304,14 +1304,16 @@ void print_path(struct path_node *start) {
 }
 
 bool nav_path(struct path_node *start_node) {
-  if(nav_approaching_xy(start_node->next->wp->x,
+  if(NULL == start_node ||
+     (NULL == start_node->next) ||
+     nav_approaching_xy(start_node->next->wp->x,
 			start_node->next->wp->y,
 		        last_x,
 			last_y, CARROT/3)) {
-    printf("Approaching destination: (%.1f, %.1f)\n", start_node->next->wp->x, start_node->next->wp->y);
+    if(start_node && start_node->next) printf("Approaching destination: (%.1f, %.1f)\n", start_node->next->wp->x, start_node->next->wp->y);
     return true;
   }
-  printf("Navigating toward destination: (%.1f, %.1f)\n", start_node->next->wp->x, start_node->next->wp->y);
+  if(DEBUG_NFZ_NAV) printf("Navigating toward destination: (%.1f, %.1f)\n", start_node->next->wp->x, start_node->next->wp->y);
   nav_route_xy(start_node->wp->x, start_node->wp->y,
 	       start_node->next->wp->x, start_node->next->wp->y);
   return false;
@@ -1320,6 +1322,7 @@ bool nav_path(struct path_node *start_node) {
 void free_path(struct path_node *start_node) {
   if(start_node) {
     free_path(start_node->next);
+    start_node->next = NULL;
     free(start_node);
   }
 }

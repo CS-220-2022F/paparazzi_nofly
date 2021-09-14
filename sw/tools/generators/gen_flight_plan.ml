@@ -1298,8 +1298,8 @@ let print_flight_plan_h = fun xml utm0 xml_file out_file ->
   let sectors_type = List.map (fun x -> match ExtXml.attrib_or_default x "type" "static" with "dynamic" -> DynamicSector | _ -> StaticSector) noflyzones in
   List.iter2 (print_inside_nfz out) sectors_type nfzs;
   (* print_update_occgrid out; *)
-  List.iter2 (print_approaching_nfz out) sectors_type nfzs;
-  List.iter2 (print_go_around_nfz out) sectors_type nfzs;
+  (* List.iter2 (print_approaching_nfz out) sectors_type nfzs; *)
+  (* List.iter2 (print_go_around_nfz out) sectors_type nfzs; *)
 
 
   (* print main flight plan state machine *)

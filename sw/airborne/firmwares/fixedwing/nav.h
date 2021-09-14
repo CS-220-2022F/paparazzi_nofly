@@ -166,40 +166,65 @@ extern void nav_route_xy(float last_wp_x, float last_wp_y, float wp_x, float wp_
 /*#define NavSegment(_start, _end)					\
   nav_route_xy(waypoints[_start].x, waypoints[_start].y, waypoints[_end].x, waypoints[_end].y)*/
 
-//TODO fix the conditionals here
+#define DEBUG_NFZ_NAV 0
+
 #define NavSegment(_start, _end)					\
   do {									\
     if(NavApproaching(_start, CARROT)) {				\
-      printf("Approaching wp %d\n", _start);				\
+      if(DEBUG_NFZ_NAV) printf("Approaching wp %d\n", _start);		\
       if(!path_calculated) {						\
+	if(DEBUG_NFZ_NAV) {						\
+	  printf("Need to calculate a new path\n");			\
+	  printf("HOME_NODE is %p\n", HOME_NODE);			\
+	}								\
 	struct vis_node *start_node = closest_node(HOME_NODE, waypoints[_start].x, waypoints[_start].y); \
 	struct vis_node *end_node = closest_node(HOME_NODE, waypoints[_end].x, waypoints[_end].y); \
 	free_path(PATH_START);						\
+	if(DEBUG_NFZ_NAV) printf("start_node = %p, end_node = %p\n", start_node, end_node); \
 	PATH_START = greedy_path(start_node, end_node);			\
+	if(DEBUG_NFZ_NAV) printf("PATH_START = %p\n", PATH_START);	\
 	print_path(PATH_START);						\
 	CURR_NODE =  PATH_START;					\
 	path_calculated = true;						\
       }									\
       else {								\
 	if(nav_path(CURR_NODE)) {					\
-	  printf("Moving on from this leg\n");				\
-	  CURR_NODE = CURR_NODE->next;					\
+	  if(DEBUG_NFZ_NAV) printf("Moving on from this leg\n");	\
+	  if(CURR_NODE->next) {						\
+	    CURR_NODE = CURR_NODE->next;				\
+	    if(DEBUG_NFZ_NAV) printf("CURR_NODE = %p\n", CURR_NODE);	\
+	    print_path(CURR_NODE);					\
+	  }								\
+	  else {							\
+	    if(DEBUG_NFZ_NAV) printf("Moving on from this stage; at wp %d\n", _end); \
+	    NextStageAndBreakFrom(_end);				\
+	  }								\
 	}								\
       }									\
+    }									\
+    else if(NavApproaching(_end, CARROT)) {				\
+      if(DEBUG_NFZ_NAV) printf("Approaching the end of this stage: wp %d\n", _end); \
+      NextStageAndBreakFrom(_end);					\
     }									\
     else if(NULL == CURR_NODE) {					\
       path_calculated = false;						\
     }									\
     else {								\
       path_calculated = false;						\
-      printf("Navigating from (%.1f, %.1f) to (%.1f, %.1f)\n", CURR_NODE->wp->x, CURR_NODE->wp->y, CURR_NODE->next->wp->x, CURR_NODE->next->wp->y); \
+      if(DEBUG_NFZ_NAV && CURR_NODE && CURR_NODE->next) printf("Navigating from (%.1f, %.1f) to (%.1f, %.1f)\n", CURR_NODE->wp->x, CURR_NODE->wp->y, CURR_NODE->next->wp->x, CURR_NODE->next->wp->y); \
       if(nav_path(CURR_NODE)) {						\
-	printf("Moving on to the next leg\n");				\
-	CURR_NODE = CURR_NODE->next;					\
-	printf("Now navigating from (%.1f, %.1f) to (%.1f, %.1f)\n", CURR_NODE->wp->x, CURR_NODE->wp->y, CURR_NODE->next->wp->x, CURR_NODE->next->wp->y); \
+	if(DEBUG_NFZ_NAV) printf("Moving on to the next leg\n");	\
+	if(CURR_NODE->next) {						\
+	  CURR_NODE = CURR_NODE->next;					\
+	  if(DEBUG_NFZ_NAV && CURR_NODE->next) printf("Now navigating from (%.1f, %.1f) to (%.1f, %.1f)\n", CURR_NODE->wp->x, CURR_NODE->wp->y, CURR_NODE->next->wp->x, CURR_NODE->next->wp->y); \
+	}								\
+	else {								\
+	  if(DEBUG_NFZ_NAV) printf("Moving on to next stage; at wp %d\n", _end);	\
+	  NextStageAndBreakFrom(_end);					\
+	}								\
       }									\
       else {								\
-	printf("Haven\'t yet reached (%.1f, %.1f)\n", CURR_NODE->next->wp->x, CURR_NODE->next->wp->y); \
+	if(DEBUG_NFZ_NAV) printf("Haven\'t yet reached (%.1f, %.1f)\n", CURR_NODE->next->wp->x, CURR_NODE->next->wp->y); \
       }									\
     }									\
   } while(0)
