@@ -1,0 +1,71 @@
+Creating a visibility graph
+Generating node 1 (0.0, 0.0)
+Generating node 2 (69.1, 93.6)
+Generating node 3 (55.6, 112.6)
+Generating node 4 (61.3, 140.3)
+Generating node 5 (82.4, 153.1)
+Generating node 6 (103.1, 153.7)
+Generating node 7 (121.4, 147.3)
+Generating node 8 (130.6, 136.3)
+Generating node 9 (134.3, 120.7)
+Generating node 10 (130.0, 106.2)
+Generating node 11 (113.6, 86.0)
+Generating node 12 (-72.3, 87.0)
+Generating node 13 (-75.4, 110.5)
+Generating node 14 (-61.6, 131.8)
+Generating node 15 (-36.7, 147.4)
+Generating node 16 (-14.6, 146.1)
+Generating node 17 (-8.6, 132.5)
+Generating node 18 (-10.9, 115.9)
+Generating node 19 (-23.1, 100.1)
+Generating node 20 (-37.4, 91.8)
+Generating node 21 (-53.7, 88.0)
+Generating node 22 (21.2, 156.2)
+Generating node 23 (40.0, 162.5)
+Generating node 24 (58.8, 206.2)
+Generating node 25 (-150.3, 81.4)
+Generating node 26 (-98.9, 136.7)
+Generating node 27 (-165.8, 105.2)
+Generating node 28 (-195.7, 85.6)
+Generating node 29 (-260.4, 29.2)
+Generating node 30 (-176.6, 66.5)
+Generating node 31 (42.0, 42.0)
+Generating node 32 (0.0, 75.0)
+Generating node 33 (-114.5, 162.3)
+Generating node 34 (0.0, 50.0)
+Generating node 35 (35.0, 35.0)
+Generating node 36 (50.0, 0.0)
+Generating node 37 (35.0, -35.0)
+Generating node 38 (0.0, -50.0)
+Generating node 39 (-35.0, -35.0)
+Generating node 40 (-50.0, 0.0)
+Generating node 41 (-35.0, 35.0)
+Generating node 42 (160.0, 160.0)
+Generating node 43 (55.0, 300.0)
+Generating node 44 (-198.3, 33.2)
+Successfully created visibility graph
+Broadcasting on network 127.255.255.255, port 2010
+Calculated path: 1(0.0, 0.0) 32(0.0, 75.0)
+Breaking from WP 2
+Calculated path: 32(0.0, 75.0) 3(55.6, 112.6) 4(61.3, 140.3) 5(82.4, 153.1) 42(160.0, 160.0)
+Approaching destination: (55.6, 112.6)
+Approaching destination: (61.3, 140.3)
+Approaching destination: (82.4, 153.1)
+Breaking from WP 32
+Approaching destination: (160.0, 160.0)
+Moving on from this stage; at wp 3
+Breaking from WP 3
+Breaking from WP 4
+Breaking from WP 8
+Breaking from WP 36
+Breaking from WP 34
+Breaking from WP 9
+Breaking from WP 32
+Breaking from WP 2
+Breaking from WP 3
+Breaking from WP 43
+Breaking from WP 30
+Breaking from WP 32
+Breaking from WP 2
+Breaking from WP 43
+Breaking from WP 1

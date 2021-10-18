@@ -945,7 +945,7 @@ float get_angle(coords p0, coords p1, int num_verts, coords *verts) {
 
 //TODO come up with a way to make the ratio shrink as the NFZ grows; for now use area
 coords *buffer_zone(int num_verts, struct point *verts) {
-  const float RATIO = 1.2;
+  const float RATIO = 1.25;
   coords verts_as_coords[num_verts];
   for(int i = 0; i < num_verts; i++) {
     verts_as_coords[i][0] = verts[i].x;
@@ -960,8 +960,8 @@ coords *buffer_zone(int num_verts, struct point *verts) {
   float *c = centroid(num_verts, verts_as_coords);
   coords *bz = (coords *)calloc(sizeof(coords), num_verts);
   for(int i = 0; i < num_verts; i++) {
-    bz[i][0] = c[0] + (1.1 + (RATIO - 1.1) * 1000/area) * (verts[i].x - c[0]);
-    bz[i][1] = c[1] + (1.1 + (RATIO - 1.1) * 1000/area) * (verts[i].y - c[1]);
+    bz[i][0] = c[0] + RATIO * (verts[i].x - c[0]);
+    bz[i][1] = c[1] + RATIO * (verts[i].y - c[1]);
   }
   return bz;
 }
@@ -1286,6 +1286,24 @@ struct path_node *greedy_path(struct vis_node * const start, struct vis_node * c
     struct vis_node *next = best_neighbor(cur->wp, target);
     cur = init_path_node(next, cur);
   }
+  //prune the path
+  for(cur = first_wp; NULL != cur && NULL != cur->next && NULL != cur->next->next; ) {
+    bool can_skip = false;
+    for(int i = 0; i < cur->wp->num_neighbors; i++) {
+      if(cur->next->next->wp == cur->wp->neighbors[i]) {
+	can_skip = true;
+	break;
+      }
+    }
+    if(can_skip) {
+      struct path_node *temp = cur->next;
+      cur->next = cur->next->next;
+      free(temp);
+    }
+    else {
+      cur = cur->next;
+    }
+  }
   return first_wp;
 }
 
@@ -1304,6 +1322,10 @@ void print_path(struct path_node *start) {
 }
 
 bool nav_path(struct path_node *start_node) {
+  if(NULL == start_node) {
+    printf("Start node is null, somehow\n");
+    return false;
+  }
   if(NULL == start_node ||
      (NULL == start_node->next) ||
      nav_approaching_xy(start_node->next->wp->x,
@@ -1311,6 +1333,7 @@ bool nav_path(struct path_node *start_node) {
 		        last_x,
 			last_y, CARROT/3)) {
     if(start_node && start_node->next) printf("Approaching destination: (%.1f, %.1f)\n", start_node->next->wp->x, start_node->next->wp->y);
+    else if(start_node) printf("Start node is (%.1f, %.1f) but no next\n", start_node->wp->x, start_node->wp->y);
     return true;
   }
   if(DEBUG_NFZ_NAV) printf("Navigating toward destination: (%.1f, %.1f)\n", start_node->next->wp->x, start_node->next->wp->y);

@@ -100,6 +100,9 @@
   </sectors>
   <blocks>
     <block name="GoThroughNoFlyZones">
+      <go wp="STDBY"/>
+      <go wp="dest"/>
+      <go wp="HOME"/>
       <path wpts="HOME, STDBY, dest"/>
       <path wpts="dest, CLIMB, c0, c4, dest2"/>
       <go wp="f1"/>

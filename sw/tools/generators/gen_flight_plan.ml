@@ -466,11 +466,13 @@ let rec print_stage = fun out index_of_waypoints x ->
             get_index_waypoint (ExtXml.attrib x "from") index_of_waypoints
           with ExtXml.Error _ -> "last_wp" in
         if last_wp = "last_wp" then
-          lprintf out "if (%sApproaching(%s,%s)) {\n" t wp at
+          lprintf out "if (moved_on || %sApproaching(%s,%s)) {\n" t wp at
         else
-          lprintf out "if (%sApproachingFrom(%s,%s,%s)) {\n" t wp last_wp at;
+          lprintf out "if (moved_on || %sApproachingFrom(%s,%s,%s)) {\n" t wp last_wp at;
         right ();
         fp_post_call out x;
+        lprintf out "printf(\"Breaking from WP %s, moved_on is %%s\\n\", moved_on?\"true\":\"false\");\n" wp;
+        lprintf out "moved_on = false;\n";
         lprintf out "NextStageAndBreakFrom(%s);\n" wp;
         left ();
         lprintf out "} else {\n";
@@ -1274,6 +1276,7 @@ let print_flight_plan_h = fun xml utm0 xml_file out_file ->
   left();
   lprintf out "};\n";
   lprintf out "struct path_node *PATH_START = NULL, *CURR_NODE = NULL;\n\n";
+  lprintf out "bool moved_on = false;\n";
   lprintf out "bool path_calculated = false;\n\n";
 
   (* index of waypoints *)
