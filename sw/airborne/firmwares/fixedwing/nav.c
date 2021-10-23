@@ -855,20 +855,6 @@ int intersect_two_lines_absolute(float *x_i, float *y_i, float ax0, float ay0, f
     return 0;
   }
   if(DEBUG_VIS_GRAPH_CREATION) printf("The lines are not parallel. Continuing.\n");
-  /*float divider, fac0, fac1;
-  divider = (((by1 - by0) * (ax1 - ax0)) + ((ay0 - ay1) * (bx1 - bx0)));
-  if (divider == 0) { return 0; }
-  fac0 = ((ax1 * (ay0 - by0)) + (ax0 * (by0 - ay1)) + (bx0 * (ay1 - ay0))) / divider;
-  printf("fac0 == %.3f\n", fac0);
-  if ((fac0 >= 1.0) || (fac0 <= 0.0))  return 0; 
-
-  fac1 = ((bx1 * (by0 - ay0)) + (bx0 * (ay0 - by1)) + (ax0 * (by1 - by0))) / divider;
-  printf("fac1 == %.3f\n", fac1);
-  if((fac1 <= 0.0) || (fac1 >= 1.0)) return 0;
-  
-  *x_i = bx0 + fac0 * (bx1 - bx0);
-  *y_i = by0 + fac0 * (by1 - by0);
-  printf("Intersection point is (%.1f, %.1f)\n", *x_i, *y_i);*/
   float denom = (ay1 - ay0) * (bx1 - bx0) - (by1 - by0) * (ax1 - ax0);
   float num_a = (by0 - ay0) * (bx1 - bx0) - (bx0 - ax0) * (by1 - by0);
   float num_b = (by0 - ay0) * (ax1 - ax0) - (bx0 - ax0) * (ay1 - ay0);
@@ -966,6 +952,8 @@ coords *buffer_zone(int num_verts, struct point *verts) {
   return bz;
 }
 
+//The following enum and structs are now defined in the generated flight plan,
+//but it's useful to have them as comments here for reference
 /*enum VISIT_STATUS {UNVISITED, VISITING, VISITED};
 
 //int node_id_gen = 0;
@@ -988,7 +976,6 @@ struct vis_node {
 struct vis_node *init_vis_node(float x_in, float y_in, int capacity) {
   static int node_id_gen = 0;
   node_id_gen++;
-  //printf("Generating node %d (%.1f, %.1f)\n", node_id_gen, x_in, y_in);
   struct vis_node ret = {0, capacity, calloc(capacity, sizeof(struct vis_node*)), calloc(capacity, sizeof(int)), x_in, y_in, node_id_gen, UNVISITED};
   struct vis_node *ptr = (struct vis_node*)calloc(1, sizeof(struct vis_node));
   memcpy(ptr, &ret, sizeof(ret));
@@ -1037,11 +1024,13 @@ int is_visible(struct vis_node *p1, struct vis_node *p2, int num_bzs, struct vis
 				      bzs[i][j]->x, bzs[i][j]->y,
 				      bzs[i][(j+1)%(bz_sizes[i])]->x,
 				       bzs[i][(j+1)%(bz_sizes[i])]->y)) {
-	if(DEBUG_VIS_GRAPH_CREATION) printf("(%.1f, %.1f) is not visible from (%.1f, %.1f) because the no-fly zone edge from (%.1f, %.1f) to (%.1f, %.1f) is in the way\n", p2->x, p2->y, p1->x, p1->y, bzs[i][j]->x, bzs[i][j]->y, bzs[i][(j+1)%(bz_sizes[i])]->x, bzs[i][(j+1)%(bz_sizes[i])]->y);
+	if(DEBUG_VIS_GRAPH_CREATION) printf("(%.1f, %.1f) is not visible from (%.1f, %.1f) because the no-fly zone edge from (%.1f, %.1f) to (%.1f, %.1f) is in the way\n",
+					    p2->x, p2->y, p1->x, p1->y, bzs[i][j]->x, bzs[i][j]->y, bzs[i][(j+1)%(bz_sizes[i])]->x, bzs[i][(j+1)%(bz_sizes[i])]->y);
 	return 0;
       }
       else {
-	if(DEBUG_VIS_GRAPH_CREATION) printf("The no-fly zone edge from (%.1f, %.1f) to (%.1f, %.1f) does not interfere with the line segment from (%.1f, %.1f) to (%.1f, %.1f)\n", bzs[i][j]->x, bzs[i][j]->y, bzs[i][(j+1)%(bz_sizes[i])]->x, bzs[i][(j+1)%(bz_sizes[i])]->y, p2->x, p2->y, p1->x, p1->y);
+	if(DEBUG_VIS_GRAPH_CREATION) printf("The no-fly zone edge from (%.1f, %.1f) to (%.1f, %.1f) does not interfere with the line segment from (%.1f, %.1f) to (%.1f, %.1f)\n",
+					    bzs[i][j]->x, bzs[i][j]->y, bzs[i][(j+1)%(bz_sizes[i])]->x, bzs[i][(j+1)%(bz_sizes[i])]->y, p2->x, p2->y, p1->x, p1->y);
       }
     }
   }
@@ -1056,13 +1045,9 @@ struct vis_node **nodes;
 //I don't think I even need to pass in the waypoints.
 //Use the variable "waypoints" from common_nav.h along with NB_WAYPOINT for the count
 struct vis_node *create_visibility_graph(int num_nfzs, struct point **nfzs, int *nfz_sizes) {
-  //printf("Creating a visibility graph\n");
   //Before even creating any points, need to filter the waypoints
   int non_nfz_wp_ct = 0;
   struct point non_nfz_wps[NB_WAYPOINT];
-  /* num_nodes = NB_WAYPOINT; */
-  /* nodes = calloc(num_nodes, sizeof(struct vis_node*)); */
-  /* int which_node = 0; */
   //note: tthere is an invisible dummy waypoint at index 0 that might get in the way
   for(int i = 1; i < NB_WAYPOINT; i++) {
     if(DEBUG_VIS_GRAPH_CREATION) printf("waypoints[%d] = (%.1f, %.1f)\n", i, waypoints[i].x, waypoints[i].y);
@@ -1085,9 +1070,6 @@ struct vis_node *create_visibility_graph(int num_nfzs, struct point **nfzs, int 
   if(DEBUG_VIS_GRAPH_CREATION) printf("Made an array of all %d waypoints not on no-fly-zone borders\n", non_nfz_wp_ct);
   //first, add home - need a reference point
   struct vis_node *home = init_vis_node(waypoints[WP_HOME].x, waypoints[WP_HOME].y, NB_WAYPOINT-1);
-  /* nodes[which_node] = home; */
-  /* which_node++; */
-  //struct vis_node *current = home;
   struct vis_node ***buffer_zones = (struct vis_node***)calloc(num_nfzs, sizeof(struct vis_node**));
   //now, create a representation of each no-fly zone's buffer zone
   if(DEBUG_VIS_GRAPH_CREATION) printf("Creating representation of buffer zones\n");
@@ -1098,8 +1080,6 @@ struct vis_node *create_visibility_graph(int num_nfzs, struct point **nfzs, int 
     //create the nodes for the buffer zone vertices
     for(int j = 0; j < nfz_sizes[i]; j++) {
       buffer_zones[i][j] = init_vis_node(bfz[j][0], bfz[j][1], NB_WAYPOINT - nfz_sizes[i] + 2);
-      /*nodes[which_node] = buffer_zones[i][j];
-	which_node++;*/
     }
     //connect them
     if(DEBUG_VIS_GRAPH_CREATION) printf("Connecting all %d vertices of buffer zone #%d\n", nfz_sizes[i], i);
@@ -1155,8 +1135,6 @@ struct vis_node *create_visibility_graph(int num_nfzs, struct point **nfzs, int 
     }
     if(DEBUG_VIS_GRAPH_CREATION) printf("Initializing non-NFZ node %d: (%.1f, %.1f)\n", i, non_nfz_wps[i].x, non_nfz_wps[i].y);
     wp_nodes[i] = init_vis_node(non_nfz_wps[i].x, non_nfz_wps[i].y, NB_WAYPOINT-1);
-    /* nodes[which_node] = wp_nodes[i]; */
-    /* which_node++; */
     //connect to home if appropriate
     if(is_visible(home, wp_nodes[i], num_nfzs, buffer_zones, nfz_sizes)) {
       add_neighbor(home, wp_nodes[i], 0);

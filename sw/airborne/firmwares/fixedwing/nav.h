@@ -103,11 +103,8 @@ extern void fly_to_xy(float x, float y);
     if(!path_calculated) {						\
       struct vis_node *start_node = closest_node(HOME_NODE, GetPosX(), GetPosY()); \
       struct vis_node *end_node = closest_node(HOME_NODE, waypoints[_wp].x, waypoints[_wp].y); \
-      printf("The closest node to (%.1f, %.1f) is at (%.1f, %.1f)\n", GetPosX(), GetPosY(), start_node->x, start_node->y); \
-      printf("The closest node to (%.1f, %.1f) is at (%.1f, %.1f)\n", waypoints[_wp].x, waypoints[_wp].y, end_node->x, end_node->y); \
       free_path(PATH_START);						\
       PATH_START = greedy_path(start_node, end_node);			\
-      print_path(PATH_START);						\
       CURR_NODE = PATH_START;						\
       path_calculated = true;						\
     }									\
