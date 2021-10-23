@@ -988,7 +988,7 @@ struct vis_node {
 struct vis_node *init_vis_node(float x_in, float y_in, int capacity) {
   static int node_id_gen = 0;
   node_id_gen++;
-  printf("Generating node %d (%.1f, %.1f)\n", node_id_gen, x_in, y_in);
+  //printf("Generating node %d (%.1f, %.1f)\n", node_id_gen, x_in, y_in);
   struct vis_node ret = {0, capacity, calloc(capacity, sizeof(struct vis_node*)), calloc(capacity, sizeof(int)), x_in, y_in, node_id_gen, UNVISITED};
   struct vis_node *ptr = (struct vis_node*)calloc(1, sizeof(struct vis_node));
   memcpy(ptr, &ret, sizeof(ret));
@@ -1056,14 +1056,15 @@ struct vis_node **nodes;
 //I don't think I even need to pass in the waypoints.
 //Use the variable "waypoints" from common_nav.h along with NB_WAYPOINT for the count
 struct vis_node *create_visibility_graph(int num_nfzs, struct point **nfzs, int *nfz_sizes) {
-  printf("Creating a visibility graph\n");
+  //printf("Creating a visibility graph\n");
   //Before even creating any points, need to filter the waypoints
   int non_nfz_wp_ct = 0;
   struct point non_nfz_wps[NB_WAYPOINT];
   /* num_nodes = NB_WAYPOINT; */
   /* nodes = calloc(num_nodes, sizeof(struct vis_node*)); */
   /* int which_node = 0; */
-  for(int i = 0; i < NB_WAYPOINT; i++) {
+  //note: tthere is an invisible dummy waypoint at index 0 that might get in the way
+  for(int i = 1; i < NB_WAYPOINT; i++) {
     if(DEBUG_VIS_GRAPH_CREATION) printf("waypoints[%d] = (%.1f, %.1f)\n", i, waypoints[i].x, waypoints[i].y);
     int on_nfz_border = 0;
     for(int j = 0; j < num_nfzs; j++) {
@@ -1187,7 +1188,7 @@ struct vis_node *create_visibility_graph(int num_nfzs, struct point **nfzs, int 
       }
     }
   }
-  printf("Successfully created visibility graph\n");
+  if(DEBUG_VIS_GRAPH_CREATION) printf("Successfully created visibility graph\n");
   return home;
 }
 
@@ -1198,6 +1199,8 @@ void reset_visit_statuses(struct vis_node *home) {
     if(VISITED == home->neighbors[i]->status) {
       reset_visit_statuses(home->neighbors[i]);
     }
+    //this line should not be necessary but it seems to be
+    if(VISITING == home->neighbors[i]->status) home->neighbors[i]->status = UNVISITED;
   }
   home->status = UNVISITED;
 }
@@ -1233,11 +1236,16 @@ struct vis_node *best_neighbor(struct vis_node *current, struct vis_node *dest) 
   float min_dist = FLT_MAX;
   struct vis_node *ret = NULL;
   for(int i = 0; i < current->num_neighbors; i++) {
-    float cur_dist = sqrt(DistanceSquare(current->x, current->y, current->neighbors[i]->x, current->neighbors[i]->y)) + sqrt(DistanceSquare(dest->x, dest->y, current->neighbors[i]->x, current->neighbors[i]->y));
-    if(min_dist > cur_dist) {
-      min_dist = cur_dist;
-      ret = current->neighbors[i];
+    if(UNVISITED == current->neighbors[i]->status) {
+      float cur_dist = sqrt(DistanceSquare(current->x, current->y, current->neighbors[i]->x, current->neighbors[i]->y)) + sqrt(DistanceSquare(dest->x, dest->y, current->neighbors[i]->x, current->neighbors[i]->y));
+      if(min_dist > cur_dist) {
+	min_dist = cur_dist;
+	ret = current->neighbors[i];
+      }
     }
+  }
+  if(NULL == ret) {
+    printf("All neighbors have been visited??\n");
   }
   return ret;
 }
@@ -1255,39 +1263,46 @@ struct vis_node *best_neighbor_xy(struct vis_node *current, float dest_x, float 
   return ret;
 }
 
+struct vis_node *closest_node_helper(struct vis_node *home, float target_x, float target_y, float closest_distsq_so_far) {
+  home->status = VISITING;
+  if(home->num_neighbors < 1) return home;
+  if((home->x == target_x) && (home->y == target_y)) return home;
+  struct vis_node *closest = NULL;
+  float xdist = home->x - target_x, ydist = home->y - target_y;
+  float home_distsq = xdist*xdist + ydist*ydist;
+  if(home_distsq < closest_distsq_so_far) {
+    closest = home;
+    closest_distsq_so_far = home_distsq;
+  }
+  for(int i = 0; i < home->num_neighbors; i++) {
+    if(UNVISITED == home->neighbors[i]->status) {
+      struct vis_node *temp = closest_node_helper(home->neighbors[i], target_x, target_y, closest_distsq_so_far);
+      xdist = temp->x - target_x;
+      ydist = temp->y - target_y;
+      float cur_distsq = xdist*xdist + ydist*ydist;
+      if(cur_distsq < closest_distsq_so_far) {
+	closest = temp;
+	closest_distsq_so_far = cur_distsq;
+      }
+    }
+  }
+  home->status = VISITED;
+  if(NULL == closest) closest = home;
+  return closest;
+}
+
 struct vis_node *closest_node(struct vis_node *home, float target_x, float target_y) {
+  reset_visit_statuses(home);
   if(home->x == target_x && home->y == target_y) {
     return home;
   }
-  struct vis_node *current = home;
-  //if we return to a previously visited node, we've probably found the closest one
-  while(VISITED != current->status) {
-    if(DEBUG_PATH_FINDING) printf("Currently evaluating (%.1f, %.1f)\n", current->x, current->y);
-    current->status = VISITED;
-    struct vis_node *next = best_neighbor_xy(current, target_x, target_y);
-    //determine which is closest between these two
-    if(VISITED == next->status) {
-      if(DistanceSquare(next->x, next->y, target_x, target_y) <= DistanceSquare(current->x, current->y, target_x, target_y)) {
-	current = next;
-      }
-    }
-    else {
-      current = next;
-    }
-  }
+  struct vis_node *closest = closest_node_helper(home, target_x, target_y, MAX_DIST_FROM_HOME*MAX_DIST_FROM_HOME*4);
   reset_visit_statuses(home);
-  return current;
+  return closest;
 }
 
-struct path_node *greedy_path(struct vis_node * const start, struct vis_node * const target) {
-  struct path_node *first_wp = init_path_node(start, NULL);
-  struct path_node *cur = first_wp;
-  while(target != cur->wp) {
-    struct vis_node *next = best_neighbor(cur->wp, target);
-    cur = init_path_node(next, cur);
-  }
-  //prune the path
-  for(cur = first_wp; NULL != cur && NULL != cur->next && NULL != cur->next->next; ) {
+void prune(struct path_node *start) {
+  for(struct path_node *cur = start; NULL != cur && NULL != cur->next && NULL != cur->next->next;) {
     bool can_skip = false;
     for(int i = 0; i < cur->wp->num_neighbors; i++) {
       if(cur->next->next->wp == cur->wp->neighbors[i]) {
@@ -1304,7 +1319,32 @@ struct path_node *greedy_path(struct vis_node * const start, struct vis_node * c
       cur = cur->next;
     }
   }
+}
+
+struct path_node *greedy_path(struct vis_node * const start, struct vis_node * const target) {
+  reset_visit_statuses(start);
+  struct path_node *first_wp = init_path_node(start, NULL);
+  struct path_node *cur = first_wp;
+  while(target != cur->wp) {
+    cur->wp->status = VISITED;
+    struct vis_node *next = best_neighbor(cur->wp, target);
+    cur = init_path_node(next, cur);
+  }
+  prune(first_wp);
+  reset_visit_statuses(start);
   return first_wp;
+}
+
+struct path_node *extend_greedy_path(struct path_node *path, struct vis_node *const target) {
+  struct path_node *last_dest = path;
+  while(NULL != last_dest && NULL != last_dest->next) {
+    last_dest = last_dest->next;
+  }
+  struct path_node *cur = greedy_path(last_dest->wp, target);
+  last_dest->next = cur->next;
+  free(cur);
+  reset_visit_statuses(path->wp);
+  return path;
 }
 
 struct path_node *greedy_path_xy(struct vis_node *const home, float start_x, float start_y, float end_x, float end_y) {
@@ -1332,8 +1372,8 @@ bool nav_path(struct path_node *start_node) {
 			start_node->next->wp->y,
 		        last_x,
 			last_y, CARROT/3)) {
-    if(start_node && start_node->next) printf("Approaching destination: (%.1f, %.1f)\n", start_node->next->wp->x, start_node->next->wp->y);
-    else if(start_node) printf("Start node is (%.1f, %.1f) but no next\n", start_node->wp->x, start_node->wp->y);
+    if(DEBUG_NFZ_NAV && start_node && start_node->next) printf("Approaching destination: (%.1f, %.1f)\n", start_node->next->wp->x, start_node->next->wp->y);
+    else if(DEBUG_NFZ_NAV && start_node) printf("Start node is (%.1f, %.1f) but no next\n", start_node->wp->x, start_node->wp->y);
     return true;
   }
   if(DEBUG_NFZ_NAV) printf("Navigating toward destination: (%.1f, %.1f)\n", start_node->next->wp->x, start_node->next->wp->y);

@@ -26,28 +26,11 @@
     <waypoint name="d7" x="126.5" y="120.7"/>
     <waypoint name="d8" x="123.1" y="109.1"/>
     <waypoint name="d9" x="110.0" y="92.9"/>
-    <waypoint name="e0" x="-66.2" y="93.0"/>
-    <waypoint name="e1" x="-68.7" y="111.8"/>
-    <waypoint name="e2" x="-57.6" y="128.8"/>
-    <waypoint name="e3" x="-37.7" y="141.3"/>
-    <waypoint name="e4" x="-20.0" y="140.3"/>
-    <waypoint name="e5" x="-15.2" y="129.4"/>
-    <waypoint name="e6" x="-17.1" y="116.1"/>
-    <waypoint name="e7" x="-26.8" y="103.5"/>
-    <waypoint name="e8" x="-38.3" y="96.8"/>
-    <waypoint name="e9" x="-51.3" y="93.8"/>
-    <waypoint name="dest" x="160" y="160"/>
-    <waypoint name="f0" x="25" y="160"/>
-    <waypoint name="f1" x="40" y="165"/>
-    <waypoint name="f2" x="55" y="200"/>
-    <waypoint name="dest2" x="55" y="300"/>
-    <waypoint name="g0" x="-155.3" y="81.8"/>
-    <waypoint name="g1" x="-114.2" y="126.1"/>
-    <waypoint name="g2" x="-167.7" y="100.9"/>
-    <waypoint name="g3" x="-191.6" y="85.2"/>
-    <waypoint name="g4" x="-243.4" y="40.1"/>
-    <waypoint name="g5" x="-176.3" y="69.9"/>
-    <waypoint name="dest3" x="-241.4" y="-42.4"/>
+    <waypoint name="dest" x="294.2" y="218.9"/>
+    <waypoint name="e0" x="160" y="160"/>
+    <waypoint name="e1" x="263.9" y="123.6"/>
+    <waypoint name="e2" x="241.3" y="183.3"/>
+    <waypoint name="e3" x="131.8" y="236.0"/>
   </waypoints>
   <sectors>
     <sector color="blue" name="exampleSector">
@@ -72,47 +55,19 @@
       <corner name="d8"/>
       <corner name="d9"/>
     </noflyzone>
-    <noflyzone color="orange" name="stayOut">
+    <noflyzone color="orange" name="keepOut2">
       <corner name="e0"/>
       <corner name="e1"/>
       <corner name="e2"/>
       <corner name="e3"/>
-      <corner name="e4"/>
-      <corner name="e5"/>
-      <corner name="e6"/>
-      <corner name="e7"/>
-      <corner name="e8"/>
-      <corner name="e9"/>
-    </noflyzone>
-    <noflyzone color="purple" name="smallTriangleNFZ">
-      <corner name="f0"/>
-      <corner name="f1"/>
-      <corner name="f2"/>
-    </noflyzone>
-    <noflyzone color="yellow" name="medHexagonNFZ">
-      <corner name="g0"/>
-      <corner name="g1"/>
-      <corner name="g2"/>
-      <corner name="g3"/>
-      <corner name="g4"/>
-      <corner name="g5"/>
     </noflyzone>
   </sectors>
   <blocks>
     <block name="GoThroughNoFlyZones">
-      <go wp="STDBY"/>
+      <!-- go wp="STDBY"/>
       <go wp="dest"/>
-      <go wp="HOME"/>
-      <path wpts="HOME, STDBY, dest"/>
-      <path wpts="dest, CLIMB, c0, c4, dest2"/>
-      <go wp="f1"/>
-      <go wp="c5"/>
-      <path wpts="c5, dest, STDBY, CLIMB"/>
-      <go wp="dest3"/>
-      <path wpts="CLIMB, e8, dest, STDBY, dest3"/>
-    </block>
-    <block name="GoHome">
-      <go wp="HOME"/>
+      <go wp="HOME"/ -->
+      <path wpts="HOME, STDBY, dest, HOME"/>
     </block>
   </blocks>
 </flight_plan>
