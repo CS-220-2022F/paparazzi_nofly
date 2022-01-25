@@ -101,11 +101,13 @@ extern void fly_to_xy(float x, float y);
 #define NavGotoWaypoint(_wp) {					\
     horizontal_mode = HORIZONTAL_MODE_WAYPOINT;				\
     if(!path_calculated) {						\
+      printf("Currently at (%.1f, %.1f)\n", GetPosX(), GetPosY());	\
       struct vis_node *start_node = closest_node(HOME_NODE, GetPosX(), GetPosY()); \
       struct vis_node *end_node = closest_node(HOME_NODE, waypoints[_wp].x, waypoints[_wp].y); \
       free_path(PATH_START);						\
-      PATH_START = greedy_path(start_node, end_node);			\
+      PATH_START = astar_path(start_node, end_node);			\
       CURR_NODE = PATH_START;						\
+      print_path(PATH_START);						\
       path_calculated = true;						\
     }									\
     else {								\
@@ -197,7 +199,7 @@ extern void nav_route_xy(float last_wp_x, float last_wp_y, float wp_x, float wp_
       struct vis_node *start_node = closest_node(HOME_NODE, waypoints[_start].x, waypoints[_start].y); \
       struct vis_node *end_node = closest_node(HOME_NODE, waypoints[_end].x, waypoints[_end].y); \
       free_path(PATH_START);						\
-      PATH_START = extend_greedy_path(greedy_path(cur_loc_node, start_node), end_node); \
+      PATH_START = extend_astar_path(astar_path(cur_loc_node, start_node), end_node); \
       CURR_NODE = PATH_START;						\
       path_calculated = true;						\
     }									\
@@ -318,6 +320,7 @@ extern coords *buffer_zone(int num_verts, struct point *verts);
 
 struct vis_node;
 struct path_node;
+struct astar_node;
 
 extern int num_nodes;
 extern struct vis_node **nodes;
@@ -335,6 +338,12 @@ extern struct path_node *greedy_path(struct vis_node *const start, struct vis_no
 extern struct path_node *extend_greedy_path(struct path_node *path, struct vis_node *const target);
 
 extern struct path_node *greedy_path_xy(struct vis_node *const home, float start_x, float start_y, float end_x, float end_y);
+
+extern struct path_node *astar_path(struct vis_node *const start, struct vis_node *const target);
+
+extern struct path_node *extend_astar_path(struct path_node *path, struct vis_node *const target);
+
+extern struct path_node *astar_path_xy(struct vis_node *const home, float start_x, float start_y, float end_x, float end_y);
 
 extern void print_path(struct path_node *start);
 

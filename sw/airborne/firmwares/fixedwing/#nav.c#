@@ -1422,7 +1422,7 @@ struct path_node *astar_path(struct vis_node *const start, struct vis_node *cons
     first = tmp;
   }
   //printf("Finished calculating the path\n");
-  print_path(first);
+  //print_path(first);
   //astar_free(&head);
   astar_free(considered);
   astar_free(head);

@@ -1274,6 +1274,15 @@ let print_flight_plan_h = fun xml utm0 xml_file out_file ->
   left();
   lprintf out "};\n";
   lprintf out "struct path_node *PATH_START = NULL, *CURR_NODE = NULL;\n\n";
+  lprintf out "struct astar_node {\n";
+  right();
+  lprintf out "struct vis_node *wp;\n";
+  lprintf out "struct astar_node *next;\n";
+  lprintf out "float priority;\n";
+  lprintf out "float dist_so_far;\n";
+  lprintf out "struct astar_node *parent;\n";
+  left();
+  lprintf out "};\n\n";
   lprintf out "bool path_calculated = false;\n\n";
 
   (* index of waypoints *)

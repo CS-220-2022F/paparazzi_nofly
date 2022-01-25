@@ -1,6 +1,6 @@
 <!DOCTYPE flight_plan SYSTEM "flight_plan.dtd">
 
-<flight_plan alt="600" ground_alt="380" max_agl="70" lat0="37.2109800" lon0="-113.4567800" max_dist_from_home="500" name="ExceptionsTest" qfu="270" security_height="25">
+<flight_plan alt="600" ground_alt="380" max_agl="70" lat0="37.2109800" lon0="-113.4567800" max_dist_from_home="500" name="AltMaxTest" qfu="270" security_height="25">
   <header>
     #include "math.h"
     #include "subsystems/datalink/datalink.h"
@@ -16,7 +16,8 @@
   </waypoints>
   <blocks>
     <block name="AscendingHelixTargetAlt">
-      <circle alt="600.0" radius="75" wp="HOME"/>
+      <circle radius="75" wp="HOME" until="NavCircleCount() > 3"/>
+      <circle alt="400.0" radius="75" wp="HOME" until="NavCircleCount() > 3"/>
     </block>
     <block name="GoHome">
       <go wp="HOME"/>
