@@ -316,7 +316,7 @@ extern float *centroid(int num_verts, coords *verts);
 
 extern float get_angle(coords p0, coords p1, int num_verts, coords *verts);
 
-extern coords *buffer_zone(int num_verts, struct point *verts);
+extern coords *buffer_zone(int num_verts, int *verts);
 
 struct vis_node;
 struct path_node;
@@ -327,7 +327,7 @@ extern struct vis_node **nodes;
 
 extern int add_neighbor(struct vis_node *node, struct vis_node *new_neighbor, int weight);
 
-extern struct vis_node *create_visibility_graph(int num_nfzs, struct point **nfzs, int *nfz_sizes);
+extern struct vis_node *create_visibility_graph();
 
 extern void print_visibility_graph(struct vis_node *home, int depth);
 

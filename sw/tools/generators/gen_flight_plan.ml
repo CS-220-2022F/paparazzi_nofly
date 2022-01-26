@@ -1043,22 +1043,30 @@ let print_auto_init_bindings = fun out abi_msgs variables iow wpts nfzs ->
     | _ -> ()
   in
   List.iter print_cb variables;
+  lprintf out "const int num_nfzs = %d;\n" (List.length nfzs);
+  let nfz_sizes = List.map List.length nfzs in
+  lprintf out "int nfz_sizes[%d] = {%s};\n" (List.length nfz_sizes) (String.concat ", " (List.map (sprintf "%d") nfz_sizes));
+  lprintf out "int **nfz_borders;\n\n";
   lprintf out "static inline void auto_nav_init(void) {\n";
   right();
   List.iter print_bindings variables;
-  let nfz_sizes = List.map List.length nfzs in
-  lprintf out "int nfz_sizes[%d] = {%s};\n" (List.length nfz_sizes) (String.concat "," (List.map (sprintf "%d") nfz_sizes));
-  let print_coords = fun (x,y) -> sprintf "{%.1ff, %.1ff, NAV_DEFAULT_ALT}" x y in
-  let get_second (_,a) = a in
-  let reg_coords p = (p.G2D.x2D, p.G2D.y2D) in
-  let nfz_to_str nfz = String.concat "," (List.map print_coords (List.map reg_coords (List.map get_second nfz))) in
-  let nfzs_as_strs = List.map nfz_to_str nfzs in
-  let print_arr_nfz index nfz_str = lprintf out "struct point nfz%d[] = {%s};\n" index nfz_str in
-  List.iteri print_arr_nfz nfzs_as_strs;
-  lprintf out "struct point *nfz_borders[] = {";
-  List.iteri (fun i str -> fprintf out "%snfz%d" (if i==0 then "" else ",") i) nfzs_as_strs;
+  let declare_nfz index size = lprintf out "int *nfz%d = (int *)calloc(%d, sizeof(int));\n" index size in
+  List.iteri declare_nfz nfz_sizes;
+  let init_nfz_corner nfz_index = fun pt_index pt -> lprintf out "nfz%d[%d] = WP_%s;\n" nfz_index pt_index pt in
+  let init_nfz_corners nfz_index nfz = List.iteri (init_nfz_corner nfz_index) nfz in
+  List.iteri init_nfz_corners nfzs;
+					   
+  (* let nfz_as_str nfz = sprintf "{%s}" (String.concat ", " (get_indices_as_strs nfz)) in
+  let nfzs_as_strs = List.map nfz_as_str nfzs in
+  let print_arr_nfz index nfz_str = lprintf out "int *nfz%d = %s;\n" index nfz_str in
+  List.iteri print_arr_nfz nfzs_as_strs; *)
+  lprintf out "nfz_borders = (int **)calloc(%d, sizeof(int*));\n" (List.length nfz_sizes);
+  List.iteri (fun i str -> lprintf out "nfz_borders[%d] = nfz%d;\n" i i) nfzs;
+  (* lprintf out "nfz_borders = {"; 
+  List.iteri (fun i str -> fprintf out "%snfz%d" (if i==0 then "" else ", ") i) nfzs_as_strs;
   fprintf out "};\n";
-  lprintf out "HOME_NODE = create_visibility_graph(%d, nfz_borders, nfz_sizes);\n" (List.length nfzs_as_strs);
+      *)
+  lprintf out "%s\n" "HOME_NODE = create_visibility_graph();";
   (* lprintf out "print_visibility_graph(HOME_NODE, 0);\n";
   lprintf out "struct vis_node *DEST_NODE = closest_node(HOME_NODE, 30.0, 30.0);\n";
   lprintf out "if(NULL == DEST_NODE) {\n";
@@ -1289,12 +1297,14 @@ let print_flight_plan_h = fun xml utm0 xml_file out_file ->
   let index_of_waypoints =
     let i = ref (-1) in
     List.map (fun w -> incr i; (name_of w, !i)) waypoints in
-		  
+
+  printf "\n%s\n" "Now parsing no-fly zones";
   let sectors_element = try ExtXml.child xml "sectors" with Not_found -> Xml.Element ("", [], []) in
   let noflyzones = List.filter (fun x -> Compat.lowercase_ascii (Xml.tag x) = "noflyzone") (Xml.children sectors_element) in
-  let get_second (_,a) = a in
-  let nfzs = List.map (parse_wpt_sector index_of_waypoints waypoints) noflyzones in
-  print_auto_init_bindings out abi_msgs variables index_of_waypoints waypoints (List.map get_second nfzs);
+  let nfz_corners = List.map Xml.children noflyzones in
+  let nfz_corner_names = List.map (List.map (fun x -> Xml.attrib x "name")) nfz_corners in
+  List.iter (printf "%s\n") (List.map (String.concat ", ") nfz_corner_names);
+  print_auto_init_bindings out abi_msgs variables index_of_waypoints waypoints nfz_corner_names;
 
   (* print sectors *)
   
@@ -1305,6 +1315,7 @@ let print_flight_plan_h = fun xml utm0 xml_file out_file ->
 
 
   let sectors_type = List.map (fun x -> match ExtXml.attrib_or_default x "type" "static" with "dynamic" -> DynamicSector | _ -> StaticSector) noflyzones in
+  let nfzs = List.map (parse_wpt_sector index_of_waypoints waypoints) noflyzones in
   List.iter2 (print_inside_nfz out) sectors_type nfzs;
   (* print_update_occgrid out; *)
   (* List.iter2 (print_approaching_nfz out) sectors_type nfzs; *)

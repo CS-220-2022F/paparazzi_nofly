@@ -930,12 +930,12 @@ float get_angle(coords p0, coords p1, int num_verts, coords *verts) {
 }
 
 //TODO come up with a way to make the ratio shrink as the NFZ grows; for now use area
-coords *buffer_zone(int num_verts, struct point *verts) {
+coords *buffer_zone(int num_verts, int *verts) {
   const float RATIO = 1.25;
   coords verts_as_coords[num_verts];
   for(int i = 0; i < num_verts; i++) {
-    verts_as_coords[i][0] = verts[i].x;
-    verts_as_coords[i][1] = verts[i].y;
+    verts_as_coords[i][0] = waypoints[verts[i]].x;
+    verts_as_coords[i][1] = waypoints[verts[i]].y;
   }
   float area = 0;
   for(int i = 0; i < num_verts; i++) {
@@ -946,8 +946,8 @@ coords *buffer_zone(int num_verts, struct point *verts) {
   float *c = centroid(num_verts, verts_as_coords);
   coords *bz = (coords *)calloc(sizeof(coords), num_verts);
   for(int i = 0; i < num_verts; i++) {
-    bz[i][0] = c[0] + RATIO * (verts[i].x - c[0]);
-    bz[i][1] = c[1] + RATIO * (verts[i].y - c[1]);
+    bz[i][0] = c[0] + RATIO * (verts_as_coords[i][0] - c[0]);
+    bz[i][1] = c[1] + RATIO * (verts_as_coords[i][1] - c[1]);
   }
   return bz;
 }
@@ -1098,29 +1098,30 @@ int is_visible(struct vis_node *p1, struct vis_node *p2, int num_bzs, struct vis
 int num_nodes;
 struct vis_node **nodes;
 
+bool is_nfz_corner(const int index, int num_nfzs, int **nfzs, int *nfz_sizes) {
+  for(int i = 0; i < num_nfzs; i++) {
+    for(int j = 0; j < nfz_sizes[i]; j++) {
+      if(index == nfzs[i][j]) return true;
+    }
+  }
+  return false;
+}
+
 //Create the visibility graph.
 //I don't think I even need to pass in the waypoints.
 //Use the variable "waypoints" from common_nav.h along with NB_WAYPOINT for the count
-struct vis_node *create_visibility_graph(int num_nfzs, struct point **nfzs, int *nfz_sizes) {
+struct vis_node *create_visibility_graph() {
+  int **nfzs = nfz_borders;
   //Before even creating any points, need to filter the waypoints
   int non_nfz_wp_ct = 0;
-  struct point non_nfz_wps[NB_WAYPOINT];
-  //note: tthere is an invisible dummy waypoint at index 0 that might get in the way
+  int non_nfz_wps[NB_WAYPOINT-1];
+  //note: there is an invisible dummy waypoint at index 0 that might get in the way
   for(int i = 1; i < NB_WAYPOINT; i++) {
     if(DEBUG_VIS_GRAPH_CREATION) printf("waypoints[%d] = (%.1f, %.1f)\n", i, waypoints[i].x, waypoints[i].y);
-    int on_nfz_border = 0;
-    for(int j = 0; j < num_nfzs; j++) {
-      for(int k = 0; k < nfz_sizes[j]; k++) {
-	if((nfzs[j][k].x == waypoints[i].x) && (nfzs[j][k].y == waypoints[i].y)) {
-	  on_nfz_border = 1;
-	  break;
-	}
-      }
-    }
-    if(!on_nfz_border) {
-      if(DEBUG_VIS_GRAPH_CREATION) printf("Waypoint %d is not on a no-fly-zone border!\n", i);
-      non_nfz_wps[non_nfz_wp_ct].x = waypoints[i].x;
-      non_nfz_wps[non_nfz_wp_ct].y = waypoints[i].y;
+    bool isCorner = is_nfz_corner(i, num_nfzs, nfzs, nfz_sizes);
+    if(!isCorner) {
+      if(DEBUG_VIS_GRAPH_CREATION) printf("Waypoint %d is not a no-fly-zone corner!\n", i);
+      non_nfz_wps[non_nfz_wp_ct] = i;
       non_nfz_wp_ct++;
     }
   }
@@ -1184,14 +1185,15 @@ struct vis_node *create_visibility_graph(int num_nfzs, struct point **nfzs, int 
   //finally, add all the other waypoints to the graph
   struct vis_node **wp_nodes = (struct vis_node**)calloc(non_nfz_wp_ct, sizeof(struct vis_node*));
   for(int i = 0; i < non_nfz_wp_ct; i++) {
+    struct point cur_wp = waypoints[non_nfz_wps[i]];
     if(DEBUG_VIS_GRAPH_CREATION) printf("i = %d\n", i);
     //if it's home, skip
-    if((non_nfz_wps[i].x == waypoints[WP_HOME].x) && (non_nfz_wps[i].y == waypoints[WP_HOME].y)) {
+    if((cur_wp.x == waypoints[WP_HOME].x) && (cur_wp.y == waypoints[WP_HOME].y)) {
       if(DEBUG_VIS_GRAPH_CREATION) printf("Index %d is home wp, which has already been created.\n", i);
       continue;
     }
-    if(DEBUG_VIS_GRAPH_CREATION) printf("Initializing non-NFZ node %d: (%.1f, %.1f)\n", i, non_nfz_wps[i].x, non_nfz_wps[i].y);
-    wp_nodes[i] = init_vis_node(non_nfz_wps[i].x, non_nfz_wps[i].y, NB_WAYPOINT-1);
+    if(DEBUG_VIS_GRAPH_CREATION) printf("Initializing non-NFZ node %d: (%.1f, %.1f)\n", i, cur_wp.x, cur_wp.y);
+    wp_nodes[i] = init_vis_node(cur_wp.x, cur_wp.y, NB_WAYPOINT-2);
     //connect to home if appropriate
     if(is_visible(home, wp_nodes[i], num_nfzs, buffer_zones, nfz_sizes)) {
       add_neighbor(home, wp_nodes[i], 0);
@@ -1211,8 +1213,9 @@ struct vis_node *create_visibility_graph(int num_nfzs, struct point **nfzs, int 
     //have to check against all other waypoints too
     if(DEBUG_VIS_GRAPH_CREATION) printf("Checking for visible previously added non-NFZ wps\n");
     for(int j = 0; j < i; j++) {
+      struct point added_wp = waypoints[non_nfz_wps[j]];
       //if it's home, skip
-      if((non_nfz_wps[j].x == waypoints[WP_HOME].x) && (non_nfz_wps[j].y == waypoints[WP_HOME].y)) {
+      if((added_wp.x == waypoints[WP_HOME].x) && (added_wp.y == waypoints[WP_HOME].y)) {
 	if(DEBUG_VIS_GRAPH_CREATION) printf("Index %d is home wp, which has already been checked.\n", j);
 	continue;
       }
