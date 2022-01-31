@@ -1107,9 +1107,25 @@ bool is_nfz_corner(const int index, int num_nfzs, int **nfzs, int *nfz_sizes) {
   return false;
 }
 
+//Free and recreate the visibility graph.
+
+struct vis_node *reconstruct_visibility_graph(struct vis_node *home) {
+  free_visibility_graph(home);
+  return create_visibility_graph();
+}
+
+//Free the visibility graph.
+void free_visibility_graph(struct vis_node *home) {
+  home->status = VISITING;
+  for(int i = 0; i < home->num_neighbors; i++) {
+    if(UNVISITED == home->neighbors[i]->status) {
+      free_visibility_graph(home->neighbors[i]);
+    }
+  }
+  free(home);
+}
+
 //Create the visibility graph.
-//I don't think I even need to pass in the waypoints.
-//Use the variable "waypoints" from common_nav.h along with NB_WAYPOINT for the count
 struct vis_node *create_visibility_graph() {
   int **nfzs = nfz_borders;
   //Before even creating any points, need to filter the waypoints

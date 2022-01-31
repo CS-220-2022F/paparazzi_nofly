@@ -327,6 +327,10 @@ extern struct vis_node **nodes;
 
 extern int add_neighbor(struct vis_node *node, struct vis_node *new_neighbor, int weight);
 
+extern struct vis_node *reconstruct_visibility_graph(struct vis_node *home);
+
+extern void free_visibility_graph(struct vis_node *home);
+
 extern struct vis_node *create_visibility_graph();
 
 extern void print_visibility_graph(struct vis_node *home, int depth);
