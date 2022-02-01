@@ -168,8 +168,13 @@ void nav_move_waypoint(uint8_t wp_id, float ux, float uy, float alt)
     dy = uy - nav_utm_north0 - waypoints[WP_HOME].y;
     BoundAbs(dx, max_dist_from_home);
     BoundAbs(dy, max_dist_from_home);
+    //need to also move the corresponding visibility graph point
     waypoints[wp_id].x = waypoints[WP_HOME].x + dx;
     waypoints[wp_id].y = waypoints[WP_HOME].y + dy;
     waypoints[wp_id].a = alt;
+    vis_graph_ref[wp_id]->x = waypoints[wp_id].x;
+    vis_graph_ref[wp_id]->y = waypoints[wp_id].y;
+    //TODO change no-fly zones as well, if this waypoint is on a NFZ border
+    //TODO reconstruct current path, in case the destination is this waypoint
   }
 }

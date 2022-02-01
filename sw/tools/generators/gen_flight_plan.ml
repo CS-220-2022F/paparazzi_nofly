@@ -1046,7 +1046,8 @@ let print_auto_init_bindings = fun out abi_msgs variables iow wpts nfzs ->
   lprintf out "const int num_nfzs = %d;\n" (List.length nfzs);
   let nfz_sizes = List.map List.length nfzs in
   lprintf out "int nfz_sizes[%d] = {%s};\n" (List.length nfz_sizes) (String.concat ", " (List.map (sprintf "%d") nfz_sizes));
-  lprintf out "int **nfz_borders;\n\n";
+  lprintf out "int **nfz_borders;\n";
+  lprintf out "struct vis_node **vis_graph_ref;\n\n";
   lprintf out "static inline void auto_nav_init(void) {\n";
   right();
   List.iter print_bindings variables;
@@ -1062,27 +1063,8 @@ let print_auto_init_bindings = fun out abi_msgs variables iow wpts nfzs ->
   List.iteri print_arr_nfz nfzs_as_strs; *)
   lprintf out "nfz_borders = (int **)calloc(%d, sizeof(int*));\n" (List.length nfz_sizes);
   List.iteri (fun i str -> lprintf out "nfz_borders[%d] = nfz%d;\n" i i) nfzs;
-  (* lprintf out "nfz_borders = {"; 
-  List.iteri (fun i str -> fprintf out "%snfz%d" (if i==0 then "" else ", ") i) nfzs_as_strs;
-  fprintf out "};\n";
-      *)
+  lprintf out "vis_graph_ref = (struct vis_node**)calloc(NB_WAYPOINT, sizeof(struct vis_node*));\n";
   lprintf out "%s\n" "HOME_NODE = create_visibility_graph();";
-  (* lprintf out "print_visibility_graph(HOME_NODE, 0);\n";
-  lprintf out "struct vis_node *DEST_NODE = closest_node(HOME_NODE, 30.0, 30.0);\n";
-  lprintf out "if(NULL == DEST_NODE) {\n";
-  right();
-  lprintf out "printf(\"Error: could not find a node near (30,30)\\n\");";
-  left();
-  lprintf out "}";
-  lprintf out "else {\n";
-  right();
-  lprintf out "struct path_node *start_to_dest = greedy_path(HOME_NODE, DEST_NODE);\n";
-  lprintf out "print_path(start_to_dest);\n";
-  left();
-  lprintf out "}\n";
-  lprintf out "struct vis_node *e4 = closest_node(HOME_NODE, -23.0, -10.0);\n";
-  lprintf out "struct path_node *dest_to_e4 = greedy_path(DEST_NODE, e4);\n";
-  lprintf out "print_path(dest_to_e4);\n"; *)
   left();
   lprintf out "}\n\n"
 

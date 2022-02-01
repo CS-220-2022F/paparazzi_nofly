@@ -1144,6 +1144,7 @@ struct vis_node *create_visibility_graph() {
   if(DEBUG_VIS_GRAPH_CREATION) printf("Made an array of all %d waypoints not on no-fly-zone borders\n", non_nfz_wp_ct);
   //first, add home - need a reference point
   struct vis_node *home = init_vis_node(waypoints[WP_HOME].x, waypoints[WP_HOME].y, NB_WAYPOINT-1);
+  vis_graph_ref[WP_HOME] = home;
   struct vis_node ***buffer_zones = (struct vis_node***)calloc(num_nfzs, sizeof(struct vis_node**));
   //now, create a representation of each no-fly zone's buffer zone
   if(DEBUG_VIS_GRAPH_CREATION) printf("Creating representation of buffer zones\n");
@@ -1154,6 +1155,7 @@ struct vis_node *create_visibility_graph() {
     //create the nodes for the buffer zone vertices
     for(int j = 0; j < nfz_sizes[i]; j++) {
       buffer_zones[i][j] = init_vis_node(bfz[j][0], bfz[j][1], NB_WAYPOINT - nfz_sizes[i] + 2);
+      vis_graph_ref[nfzs[i][j]] = buffer_zones[i][j];
     }
     //connect them
     if(DEBUG_VIS_GRAPH_CREATION) printf("Connecting all %d vertices of buffer zone #%d\n", nfz_sizes[i], i);
@@ -1210,6 +1212,7 @@ struct vis_node *create_visibility_graph() {
     }
     if(DEBUG_VIS_GRAPH_CREATION) printf("Initializing non-NFZ node %d: (%.1f, %.1f)\n", i, cur_wp.x, cur_wp.y);
     wp_nodes[i] = init_vis_node(cur_wp.x, cur_wp.y, NB_WAYPOINT-2);
+    vis_graph_ref[non_nfz_wps[i]] = wp_nodes[i];
     //connect to home if appropriate
     if(is_visible(home, wp_nodes[i], num_nfzs, buffer_zones, nfz_sizes)) {
       add_neighbor(home, wp_nodes[i], 0);
