@@ -174,7 +174,7 @@ void nav_move_waypoint(uint8_t wp_id, float ux, float uy, float alt)
     waypoints[wp_id].a = alt;
     vis_graph_ref[wp_id]->x = waypoints[wp_id].x;
     vis_graph_ref[wp_id]->y = waypoints[wp_id].y;
-    //TODO change no-fly zones as well, if this waypoint is on a NFZ border
+    reconstruct_visibility_graph(); 
     //TODO reconstruct current path, in case the destination is this waypoint
   }
 }

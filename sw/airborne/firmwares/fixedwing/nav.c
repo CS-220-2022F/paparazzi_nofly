@@ -1095,6 +1095,23 @@ int is_visible(struct vis_node *p1, struct vis_node *p2, int num_bzs, struct vis
   return 1;
 }
 
+//based solely on the existing visibility graph
+int is_visible2(struct vis_node *p1, struct vis_node *p2) {
+  float ipx, ipy;
+  for(int i = 0; i < num_nfzs; i++) {
+    for(int j = 0; j < nfz_sizes[i]; j++) {
+      if(intersect_two_lines_absolute(&ipx, &ipy,
+			     p1->x, p1->y, p2->x, p2->y,
+			     vis_graph_ref[nfz_borders[i][j]]->x, vis_graph_ref[nfz_borders[i][j]]->y,
+			     vis_graph_ref[nfz_borders[i][(j+1)%nfz_sizes[i]]]->x,
+			     vis_graph_ref[nfz_borders[i][(j+1)%nfz_sizes[i]]]->y)) {
+	return 0;
+      }
+    }
+  }
+  return 1;
+}
+
 int num_nodes;
 struct vis_node **nodes;
 
@@ -1109,9 +1126,87 @@ bool is_nfz_corner(const int index, int num_nfzs, int **nfzs, int *nfz_sizes) {
 
 //Free and recreate the visibility graph.
 
-struct vis_node *reconstruct_visibility_graph(struct vis_node *home) {
-  free_visibility_graph(home);
-  return create_visibility_graph();
+void reconstruct_visibility_graph() {
+  //clear the connections
+  for(int i = 1; i < NB_WAYPOINT; i++) {
+    vis_graph_ref[i]->num_neighbors = 0;
+  }
+  //get the indices of the non-NFZ waypoints
+  int non_nfz_wp_ct = 0;
+  int non_nfz_wps[NB_WAYPOINT-1];
+  for(int i = 1; i < NB_WAYPOINT; i++) {
+    bool isCorner = is_nfz_corner(i, num_nfzs, nfz_borders, nfz_sizes);
+    if(!isCorner) {
+      non_nfz_wps[non_nfz_wp_ct] = i;
+      non_nfz_wp_ct++;
+    }
+  }
+  //get and connect all the buffer zones
+  for(int i = 0; i < num_nfzs; i++) {
+    //get the buffer zone for the current NFZ
+    coords *bfz = buffer_zone(nfz_sizes[i], nfz_borders[i]);
+    //move the existing visibility graph nodes to their new spots, if necessary
+    for(int j = 0; j < nfz_sizes[i]; j++) {
+      vis_graph_ref[nfz_borders[i][j]]->x = bfz[j][0];
+      vis_graph_ref[nfz_borders[i][j]]->y = bfz[j][1];
+    }
+    //connect each NFZ to itself
+    for(int j = 0; j < nfz_sizes[i]; j++) {
+      if(add_neighbor(vis_graph_ref[nfz_borders[i][j]], vis_graph_ref[nfz_borders[i][(j+1)%nfz_sizes[i]]], 1) &&
+	 add_neighbor(vis_graph_ref[nfz_borders[i][(j+1)%nfz_sizes[i]]], vis_graph_ref[nfz_borders[i][j]], 1)) {
+	//successfully connected this vertex with the next; carry on
+      }
+      else {
+	printf("ERROR: Failed to connect no-fly zone %d\n", i);
+	exit(1);
+      }
+    }
+  }
+  //connect all the no-fly zones to each other
+  for(int i = 0; i < num_nfzs; i++) {
+    for(int j = 0; j < nfz_sizes[i]; j++) {
+      //connect to home wp
+      if(is_visible2(HOME_NODE, vis_graph_ref[nfz_borders[i][j]])) {
+	add_neighbor(HOME_NODE, vis_graph_ref[nfz_borders[i][j]], 0);
+	add_neighbor(vis_graph_ref[nfz_borders[i][j]], HOME_NODE, 0);
+      }
+      for(int k = 0; k < num_nfzs; k++) {
+	if(k == i) continue;
+	for(int l = 0; l < nfz_sizes[k]; l++) {
+	  //connect to other NFZ
+	  if(is_visible2(vis_graph_ref[nfz_borders[i][j]], vis_graph_ref[nfz_borders[k][l]])) {
+	    add_neighbor(vis_graph_ref[nfz_borders[i][j]], vis_graph_ref[nfz_borders[k][l]], 0);
+	  }
+	}
+      }
+    }
+  }
+  //reconnect all the non-NFZ waypoints
+  for(int i = 0; i < non_nfz_wp_ct; i++) {
+    if(WP_HOME == non_nfz_wps[i]) continue;
+    //connect to home
+    if(is_visible2(vis_graph_ref[WP_HOME], vis_graph_ref[non_nfz_wps[i]])) {
+      add_neighbor(vis_graph_ref[WP_HOME], vis_graph_ref[non_nfz_wps[i]], 0);
+      add_neighbor(vis_graph_ref[non_nfz_wps[i]], vis_graph_ref[WP_HOME], 0);
+    }
+    //connect to the no-fly zones
+    for(int j = 0; j < num_nfzs; j++) {
+      for(int k = 0; k < nfz_sizes[j]; k++) {
+	if(is_visible2(vis_graph_ref[non_nfz_wps[i]], vis_graph_ref[nfz_borders[j][k]])) {
+	  add_neighbor(vis_graph_ref[non_nfz_wps[i]], vis_graph_ref[nfz_borders[j][k]], 0);
+	  add_neighbor(vis_graph_ref[nfz_borders[j][k]], vis_graph_ref[non_nfz_wps[i]], 0);
+	}
+      }
+    }
+    //connect to the other non-NFZ waypoints
+    for(int j = 0; j < i; j++) {
+      if(WP_HOME == j) continue;
+      if(is_visible2(vis_graph_ref[non_nfz_wps[i]], vis_graph_ref[non_nfz_wps[j]])) {
+	add_neighbor(vis_graph_ref[non_nfz_wps[i]], vis_graph_ref[non_nfz_wps[j]], 0);
+	add_neighbor(vis_graph_ref[non_nfz_wps[j]], vis_graph_ref[non_nfz_wps[i]], 0);
+      }
+    }
+  }
 }
 
 //Free the visibility graph.
@@ -1166,7 +1261,7 @@ struct vis_node *create_visibility_graph() {
 	//successfully connected this vertex with the next; carry on
       }
       else {
-	printf("ERROR: Failed to connect no-fly zone %d", i);
+	printf("ERROR: Failed to connect no-fly zone %d\n", i);
 	return NULL;
       }
     }
@@ -1206,7 +1301,7 @@ struct vis_node *create_visibility_graph() {
     struct point cur_wp = waypoints[non_nfz_wps[i]];
     if(DEBUG_VIS_GRAPH_CREATION) printf("i = %d\n", i);
     //if it's home, skip
-    if((cur_wp.x == waypoints[WP_HOME].x) && (cur_wp.y == waypoints[WP_HOME].y)) {
+    if(WP_HOME == non_nfz_wps[i]) {
       if(DEBUG_VIS_GRAPH_CREATION) printf("Index %d is home wp, which has already been created.\n", i);
       continue;
     }
