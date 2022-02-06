@@ -1,0 +1,62 @@
+<!DOCTYPE flight_plan SYSTEM "flight_plan.dtd">
+
+<flight_plan alt="600" ground_alt="380" lat0="37.2109800" lon0="-113.4567800" max_dist_from_home="500" name="NoFlyZoneTest" qfu="270" security_height="25">
+  <header>
+
+</header>
+  <waypoints>
+    <waypoint name="HOME" x="0" y="0"/>
+    <waypoint name="STDBY" x="0" y="75"/>
+    <waypoint name="CLIMB" x="-114.5" y="162.3"/>
+    <waypoint name="_c0" x="0" y="50"/>
+    <waypoint name="_c1" x="35" y="35"/>
+    <waypoint name="_c2" x="50" y="0"/>
+    <waypoint name="_c3" x="35" y="-35"/>
+    <waypoint name="_c4" x="0" y="-50"/>
+    <waypoint name="_c5" x="-35" y="-35"/>
+    <waypoint name="_c6" x="-50" y="0"/>
+    <waypoint name="_c7" x="-35" y="35"/>
+    <waypoint name="d0" x="74.4" y="99.0"/>
+    <waypoint name="d1" x="63.6" y="114.2"/>
+    <waypoint name="d2" x="68.1" y="136.4"/>
+    <waypoint name="d3" x="85.0" y="146.6"/>
+    <waypoint name="d4" x="101.6" y="147.1"/>
+    <waypoint name="d5" x="116.2" y="142.0"/>
+    <waypoint name="d6" x="123.6" y="133.2"/>
+    <waypoint name="d7" x="126.5" y="120.7"/>
+    <waypoint name="d8" x="123.1" y="109.1"/>
+    <waypoint name="d9" x="110.0" y="92.9"/>
+    <waypoint name="dest" x="160" y="160"/>
+  </waypoints>
+  <sectors>
+    <sector color="blue" name="exampleSector">
+      <corner name="_c0"/>
+      <corner name="_c1"/>
+      <corner name="_c2"/>
+      <corner name="_c3"/>
+      <corner name="_c4"/>
+      <corner name="_c5"/>
+      <corner name="_c6"/>
+      <corner name="_c7"/>
+    </sector>
+    <noflyzone color="red" name="keepOut">
+      <corner name="d0"/>
+      <corner name="d1"/>
+      <corner name="d2"/>
+      <corner name="d3"/>
+      <corner name="d4"/>
+      <corner name="d5"/>
+      <corner name="d6"/>
+      <corner name="d7"/>
+      <corner name="d8"/>
+      <corner name="d9"/>
+    </noflyzone>
+  </sectors>
+  <blocks>
+    <block name="GoThroughNoFlyZone">
+      <go wp="STDBY"/>
+      <go wp="dest"/>
+      <go wp="HOME"/>
+    </block>
+  </blocks>
+</flight_plan>

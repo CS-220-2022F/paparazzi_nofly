@@ -175,6 +175,11 @@ void nav_move_waypoint(uint8_t wp_id, float ux, float uy, float alt)
     vis_graph_ref[wp_id]->x = waypoints[wp_id].x;
     vis_graph_ref[wp_id]->y = waypoints[wp_id].y;
     reconstruct_visibility_graph(); 
-    //TODO reconstruct current path, in case the destination is this waypoint
+    //reconstruct the current path
+    struct vis_node *cur_loc_node = closest_node(HOME_NODE, GetPosX(), GetPosY());
+    struct vis_node *end_node = closest_node(HOME_NODE, dest_x, dest_y);
+    free_path(PATH_START);
+    PATH_START = astar_path(cur_loc_node, end_node);
+    CURR_NODE = PATH_START;
   }
 }

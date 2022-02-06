@@ -98,16 +98,16 @@ extern void fly_to_xy(float x, float y);
     fly_to_xy(waypoints[_wp].x, waypoints[_wp].y);	\
   }
 */
-#define NavGotoWaypoint(_wp) {					\
+#define NavGotoWaypoint(_wp) {						\
     horizontal_mode = HORIZONTAL_MODE_WAYPOINT;				\
     if(!path_calculated) {						\
-      printf("Currently at (%.1f, %.1f)\n", GetPosX(), GetPosY());	\
+      dest_x = waypoints[_wp].x;					\
+      dest_y = waypoints[_wp].y;					\
       struct vis_node *start_node = closest_node(HOME_NODE, GetPosX(), GetPosY()); \
       struct vis_node *end_node = closest_node(HOME_NODE, waypoints[_wp].x, waypoints[_wp].y); \
       free_path(PATH_START);						\
       PATH_START = astar_path(start_node, end_node);			\
       CURR_NODE = PATH_START;						\
-      print_path(PATH_START);						\
       path_calculated = true;						\
     }									\
     else {								\
@@ -192,9 +192,13 @@ extern void nav_route_xy(float last_wp_x, float last_wp_y, float wp_x, float wp_
 */
 #define DEBUG_NFZ_NAV 0
 
+extern float dest_x, dest_y;
+
 #define NavSegment(_start, _end)					\
   do {									\
     if(!path_calculated) {						\
+      dest_x = waypoints[_end].x;					\
+      dest_y = waypoints[_end].y;					\
       struct vis_node *cur_loc_node = closest_node(HOME_NODE, GetPosX(), GetPosY()); \
       struct vis_node *start_node = closest_node(HOME_NODE, waypoints[_start].x, waypoints[_start].y); \
       struct vis_node *end_node = closest_node(HOME_NODE, waypoints[_end].x, waypoints[_end].y); \
