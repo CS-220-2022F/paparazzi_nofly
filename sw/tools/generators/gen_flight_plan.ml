@@ -1047,7 +1047,8 @@ let print_auto_init_bindings = fun out abi_msgs variables iow wpts nfzs ->
   let nfz_sizes = List.map List.length nfzs in
   lprintf out "int nfz_sizes[%d] = {%s};\n" (List.length nfz_sizes) (String.concat ", " (List.map (sprintf "%d") nfz_sizes));
   lprintf out "int **nfz_borders;\n";
-  lprintf out "struct vis_node **vis_graph_ref;\n\n";
+  lprintf out "struct vis_node **vis_graph_ref;\n";
+  lprintf out "struct vis_node *temp_node = NULL;\n\n";
   lprintf out "static inline void auto_nav_init(void) {\n";
   right();
   List.iter print_bindings variables;

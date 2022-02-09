@@ -176,10 +176,17 @@ void nav_move_waypoint(uint8_t wp_id, float ux, float uy, float alt)
     vis_graph_ref[wp_id]->y = waypoints[wp_id].y;
     reconstruct_visibility_graph(); 
     //reconstruct the current path
-    struct vis_node *cur_loc_node = closest_node(HOME_NODE, GetPosX(), GetPosY());
+    temp_node = init_vis_node(GetPosX(), GetPosY(), NB_WAYPOINT);
+    for(int i = 1; i < NB_WAYPOINT; i++) {
+      printf("checking waypoint %d\n", i);
+      if(is_visible2(temp_node, vis_graph_ref[i])) {
+	add_neighbor(temp_node, vis_graph_ref[i], 0);
+      }
+    }
     struct vis_node *end_node = closest_node(HOME_NODE, dest_x, dest_y);
     free_path(PATH_START);
-    PATH_START = astar_path(cur_loc_node, end_node);
+    PATH_START = astar_path(temp_node, end_node);
     CURR_NODE = PATH_START;
+    //There shouldn't be leaks here, but if there are, free PATH_START then set it to CURR_NODE
   }
 }

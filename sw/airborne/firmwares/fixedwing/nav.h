@@ -81,6 +81,8 @@ extern float max_agl_m;
 extern struct vis_node *HOME_NODE;
 extern bool path_calculated;
 
+extern struct vis_node *temp_node;
+
 extern int nav_mode;
 #define NAV_MODE_ROLL 1
 #define NAV_MODE_COURSE 2
@@ -106,6 +108,7 @@ extern void fly_to_xy(float x, float y);
       struct vis_node *start_node = closest_node(HOME_NODE, GetPosX(), GetPosY()); \
       struct vis_node *end_node = closest_node(HOME_NODE, waypoints[_wp].x, waypoints[_wp].y); \
       free_path(PATH_START);						\
+      if(temp_node) { free(temp_node); temp_node = NULL; }		\
       PATH_START = astar_path(start_node, end_node);			\
       CURR_NODE = PATH_START;						\
       path_calculated = true;						\
@@ -203,6 +206,7 @@ extern float dest_x, dest_y;
       struct vis_node *start_node = closest_node(HOME_NODE, waypoints[_start].x, waypoints[_start].y); \
       struct vis_node *end_node = closest_node(HOME_NODE, waypoints[_end].x, waypoints[_end].y); \
       free_path(PATH_START);						\
+      if(temp_node) { free(temp_node); temp_node = NULL; }		\
       PATH_START = extend_astar_path(astar_path(cur_loc_node, start_node), end_node); \
       CURR_NODE = PATH_START;						\
       path_calculated = true;						\
@@ -329,7 +333,13 @@ struct astar_node;
 extern int num_nodes;
 extern struct vis_node **nodes;
 
+extern struct vis_node *init_vis_node(float x_in, float y_in, int capacity);
+
 extern int add_neighbor(struct vis_node *node, struct vis_node *new_neighbor, int weight);
+
+extern int is_visible(struct vis_node *p1, struct vis_node *p2, int num_bzs, struct vis_node ***bzs, int *bz_sizes);
+
+extern int is_visible2(struct vis_node *p1, struct vis_node *p2);
 
 extern void reconstruct_visibility_graph();
 
