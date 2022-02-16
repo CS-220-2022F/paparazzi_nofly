@@ -1109,6 +1109,17 @@ int is_visible2(struct vis_node *p1, struct vis_node *p2) {
       }
     }
   }
+  for(int i = 0; i < NB_NOFLYPOINT; i++) {
+    for(int j = 0; j < 8; j++) {
+      if(intersect_two_lines_absolute(&ipx, &ipy, p1->x, p1->y, p2->x, p2->y,
+				      vis_graph_ref[NB_WAYPOINT + 8*i + j]->x,
+				      vis_graph_ref[NB_WAYPOINT + 8*i + j]->y,
+				      vis_graph_ref[NB_WAYPOINT + 8*i + (j+1)%8]->x,
+				      vis_graph_ref[NB_WAYPOINT + 8*i + (j+1)%8]->y)) {
+	return 0;
+      }
+    }
+  }
   return 1;
 }
 
@@ -1124,17 +1135,17 @@ bool is_nfz_corner(const int index, int num_nfzs, int **nfzs, int *nfz_sizes) {
   return false;
 }
 
-//Free and recreate the visibility graph.
+//Remove all edges in the visibility graph and recalculate them. Should be used every time a waypoint is moved.
 
 void reconstruct_visibility_graph() {
   //clear the connections
-  for(int i = 1; i < NB_WAYPOINT; i++) {
+  for(int i = 1; i < vis_graph_size; i++) {
     vis_graph_ref[i]->num_neighbors = 0;
   }
   //get the indices of the non-NFZ waypoints
   int non_nfz_wp_ct = 0;
   int non_nfz_wps[NB_WAYPOINT-1];
-  for(int i = 1; i < NB_WAYPOINT; i++) {
+  for(int i = 1; i < vis_graph_size; i++) {
     bool isCorner = is_nfz_corner(i, num_nfzs, nfz_borders, nfz_sizes);
     if(!isCorner) {
       non_nfz_wps[non_nfz_wp_ct] = i;
@@ -1162,7 +1173,52 @@ void reconstruct_visibility_graph() {
       }
     }
   }
+  //now redo all the no-fly points
+  float denom = (float)(1 + sqrt(2));
+  for(int i = 0; i < NB_NOFLYPOINT; i++) {
+    float x = noflypoints[i].x, y = noflypoints[i].y, rad = noflypoints[i].radius;
+    vis_graph_ref[NB_WAYPOINT + 8*i]->x = x - rad/denom;
+    vis_graph_ref[NB_WAYPOINT + 8*i]->y = y + rad;
+    vis_graph_ref[NB_WAYPOINT + 8*i + 1]->x = x + rad/denom;
+    vis_graph_ref[NB_WAYPOINT + 8*i + 1]->y = y + rad;
+    vis_graph_ref[NB_WAYPOINT + 8*i + 2]->x = x + rad;
+    vis_graph_ref[NB_WAYPOINT + 8*i + 2]->y = y + rad/denom;
+    vis_graph_ref[NB_WAYPOINT + 8*i + 3]->x = x + rad;
+    vis_graph_ref[NB_WAYPOINT + 8*i + 3]->y = y - rad/denom;
+    vis_graph_ref[NB_WAYPOINT + 8*i + 4]->x = x + rad/denom;
+    vis_graph_ref[NB_WAYPOINT + 8*i + 4]->y = y - rad;
+    vis_graph_ref[NB_WAYPOINT + 8*i + 5]->x = x - rad/denom;
+    vis_graph_ref[NB_WAYPOINT + 8*i + 5]->y = y - rad;
+    vis_graph_ref[NB_WAYPOINT + 8*i + 6]->x = x - rad;
+    vis_graph_ref[NB_WAYPOINT + 8*i + 6]->y = y - rad/denom;
+    vis_graph_ref[NB_WAYPOINT + 8*i + 7]->x = x - rad;
+    vis_graph_ref[NB_WAYPOINT + 8*i + 7]->y = y + rad/denom;
+    for(int j = 0; j < 8; j++) {
+      const int index = NB_WAYPOINT + 8*i + j;
+      const int next_pt = NB_WAYPOINT + 8*i + (j+1)%8;
+      add_neighbor(vis_graph_ref[index], vis_graph_ref[next_pt], 1);
+      add_neighbor(vis_graph_ref[next_pt], vis_graph_ref[index], 1);
+    }
+  }
   //connect all the no-fly zones to each other
+  for(int i = 0; i < NB_NOFLYPOINT; i++) {
+    for(int j = 0; j < 8; j++) {
+      const int index = NB_WAYPOINT + 8*i + j;
+      if(is_visible2(vis_graph_ref[index], HOME_NODE)) {
+	add_neighbor(HOME_NODE, vis_graph_ref[index], 0);
+	add_neighbor(vis_graph_ref[index], HOME_NODE, 0);
+      }
+      for(int k = i+1; k < NB_NOFLYPOINT; k++) {
+	for(int l = 0; l < 8; l++) {
+	  const int index2 = NB_WAYPOINT + 8*k + l;
+	  if(is_visible2(vis_graph_ref[index], vis_graph_ref[index2])) {
+	    add_neighbor(vis_graph_ref[index], vis_graph_ref[index2], 0);
+	    add_neighbor(vis_graph_ref[index2], vis_graph_ref[index], 0);
+	  }
+	}
+      }
+    }
+  }
   for(int i = 0; i < num_nfzs; i++) {
     for(int j = 0; j < nfz_sizes[i]; j++) {
       //connect to home wp
@@ -1176,6 +1232,15 @@ void reconstruct_visibility_graph() {
 	  //connect to other NFZ
 	  if(is_visible2(vis_graph_ref[nfz_borders[i][j]], vis_graph_ref[nfz_borders[k][l]])) {
 	    add_neighbor(vis_graph_ref[nfz_borders[i][j]], vis_graph_ref[nfz_borders[k][l]], 0);
+	  }
+	}
+      }
+      for(int k = 0; k < NB_NOFLYPOINT; k++) {
+	for(int l = 0; l < 8; l++) {
+	  const int index = NB_WAYPOINT + 8*k + l;
+	  if(is_visible2(vis_graph_ref[index], vis_graph_ref[nfz_borders[i][j]])) {
+	    add_neighbor(vis_graph_ref[index], vis_graph_ref[nfz_borders[i][j]], 0);
+	    add_neighbor(vis_graph_ref[nfz_borders[i][i]], vis_graph_ref[index], 0);
 	  }
 	}
       }
@@ -1195,6 +1260,15 @@ void reconstruct_visibility_graph() {
 	if(is_visible2(vis_graph_ref[non_nfz_wps[i]], vis_graph_ref[nfz_borders[j][k]])) {
 	  add_neighbor(vis_graph_ref[non_nfz_wps[i]], vis_graph_ref[nfz_borders[j][k]], 0);
 	  add_neighbor(vis_graph_ref[nfz_borders[j][k]], vis_graph_ref[non_nfz_wps[i]], 0);
+	}
+      }
+    }
+    for(int j = 0; j < NB_NOFLYPOINT; j++) {
+      for(int k = 0; k < 8; k++) {
+	const int index = NB_WAYPOINT + 8*j + k;
+	if(is_visible2(vis_graph_ref[index], vis_graph_ref[non_nfz_wps[i]])) {
+	  add_neighbor(vis_graph_ref[index], vis_graph_ref[non_nfz_wps[i]], 0);
+	  add_neighbor(vis_graph_ref[non_nfz_wps[i]], vis_graph_ref[index], 0);
 	}
       }
     }
@@ -1238,7 +1312,7 @@ struct vis_node *create_visibility_graph() {
   }
   if(DEBUG_VIS_GRAPH_CREATION) printf("Made an array of all %d waypoints not on no-fly-zone borders\n", non_nfz_wp_ct);
   //first, add home - need a reference point
-  struct vis_node *home = init_vis_node(waypoints[WP_HOME].x, waypoints[WP_HOME].y, NB_WAYPOINT-1);
+  struct vis_node *home = init_vis_node(waypoints[WP_HOME].x, waypoints[WP_HOME].y, vis_graph_size-1);
   vis_graph_ref[WP_HOME] = home;
   struct vis_node ***buffer_zones = (struct vis_node***)calloc(num_nfzs, sizeof(struct vis_node**));
   //now, create a representation of each no-fly zone's buffer zone
@@ -1249,7 +1323,7 @@ struct vis_node *create_visibility_graph() {
     if(DEBUG_VIS_GRAPH_CREATION) printf("Creating nodes for buffer zone #%d\n", i);
     //create the nodes for the buffer zone vertices
     for(int j = 0; j < nfz_sizes[i]; j++) {
-      buffer_zones[i][j] = init_vis_node(bfz[j][0], bfz[j][1], NB_WAYPOINT - nfz_sizes[i] + 2);
+      buffer_zones[i][j] = init_vis_node(bfz[j][0], bfz[j][1], vis_graph_size - nfz_sizes[i] + 2);
       vis_graph_ref[nfzs[i][j]] = buffer_zones[i][j];
     }
     //connect them
@@ -1266,6 +1340,28 @@ struct vis_node *create_visibility_graph() {
       }
     }
   }
+  //Now create no-fly zones for the no-fly points
+  if(DEBUG_VIS_GRAPH_CREATION) printf("Creating no-fly zones for all the no-fly points.");
+  float denom = (float)(1 + sqrt(2));
+  for(int i = 0; i < NB_NOFLYPOINT; i++) {
+    struct vis_node **cur_nfz = (struct vis_node **)calloc(8, sizeof(struct vis_node*));
+    int rad = noflypoints[i].radius;
+    float x = noflypoints[i].x, y = noflypoints[i].y;
+    cur_nfz[0] = init_vis_node(x - rad/denom, y + rad, vis_graph_size - 1);
+    cur_nfz[1] = init_vis_node(x + rad/denom, y + rad, vis_graph_size - 1);
+    cur_nfz[2] = init_vis_node(x + rad, y + rad/denom, vis_graph_size - 1);
+    cur_nfz[3] = init_vis_node(x + rad, y - rad/denom, vis_graph_size - 1);
+    cur_nfz[4] = init_vis_node(x + rad/denom, y - rad, vis_graph_size - 1);
+    cur_nfz[5] = init_vis_node(x - rad/denom, y - rad, vis_graph_size - 1);
+    cur_nfz[6] = init_vis_node(x - rad, y - rad/denom, vis_graph_size - 1);
+    cur_nfz[7] = init_vis_node(x - rad, y + rad/denom, vis_graph_size - 1);
+    for(int j = 0; j < 8; j++) {
+      vis_graph_ref[NB_WAYPOINT + 8*i + j] = cur_nfz[j];
+      add_neighbor(cur_nfz[i], cur_nfz[(i+1)%8], 1);
+      add_neighbor(cur_nfz[(i+1)%8], cur_nfz[i], 1);
+    }
+    free(cur_nfz);
+  }
   if(DEBUG_VIS_GRAPH_CREATION) printf("Connecting all the no-fly-zones to each other\n");
   //now, connect all the no-fly zones to each other
   for(int i = 0; i < num_nfzs; i++) {
@@ -1273,9 +1369,35 @@ struct vis_node *create_visibility_graph() {
       for(int k = 0; k < num_nfzs; k++) {
 	if(k == i) continue;
 	for(int l = 0; l < nfz_sizes[k]; l++) {
-	  if(is_visible(buffer_zones[i][j], buffer_zones[k][l], num_nfzs, buffer_zones, nfz_sizes)) {
+	  if(is_visible2(buffer_zones[i][j], buffer_zones[k][l])) {
 	    //don't need to add both ways here since it'll be done by the loops
 	    add_neighbor(buffer_zones[i][j], buffer_zones[k][l], 0);
+	  }
+	}
+      }
+      for(int k = 0; k < NB_NOFLYPOINT; k++) {
+	for(int l = 0; l < 8; l++) {
+	  if(is_visible2(buffer_zones[i][j], vis_graph_ref[NB_WAYPOINT + 8*k + l])) {
+	    add_neighbor(buffer_zones[i][j], vis_graph_ref[NB_WAYPOINT + 8*k + l], 0);
+	    add_neighbor(vis_graph_ref[NB_WAYPOINT + 8*k + l], buffer_zones[i][j], 0);
+	  }
+	}
+      }
+    }
+  }
+  for(int i = 0; i < NB_NOFLYPOINT; i++) {
+    for(int j = 0; j < 8; j++) {
+      const int index = NB_WAYPOINT + 8*i + j;
+      if(is_visible2(home, vis_graph_ref[index])) {
+	add_neighbor(home, vis_graph_ref[index], 0);
+	add_neighbor(vis_graph_ref[index], home, 0);
+      }
+      for(int k = i+1; k < NB_NOFLYPOINT; k++) {
+	for(int l = 0; l < 8; l++) {
+	  const int index2 = NB_WAYPOINT + 8*k + l;
+	  if(is_visible2(vis_graph_ref[index], vis_graph_ref[index2])) {
+	    add_neighbor(vis_graph_ref[index], vis_graph_ref[index2], 0);
+	    add_neighbor(vis_graph_ref[index2], vis_graph_ref[index], 0);
 	  }
 	}
       }
@@ -1284,7 +1406,7 @@ struct vis_node *create_visibility_graph() {
   if(DEBUG_VIS_GRAPH_CREATION) printf("Connecting all no-fly-zones to home\n");
   for(int i = 0; i < num_nfzs; i++) {
     for(int j = 0; j < nfz_sizes[i]; j++) {
-      if(is_visible(home, buffer_zones[i][j], num_nfzs, buffer_zones, nfz_sizes)) {
+      if(is_visible2(home, buffer_zones[i][j])) {
 	if(DEBUG_VIS_GRAPH_CREATION) printf("Adding neighbor to home: (%.1f, %.1f)\n", buffer_zones[i][j]->x, buffer_zones[i][j]->y);
 	add_neighbor(buffer_zones[i][j], home, 0);
 	add_neighbor(home, buffer_zones[i][j], 0);
@@ -1306,10 +1428,10 @@ struct vis_node *create_visibility_graph() {
       continue;
     }
     if(DEBUG_VIS_GRAPH_CREATION) printf("Initializing non-NFZ node %d: (%.1f, %.1f)\n", i, cur_wp.x, cur_wp.y);
-    wp_nodes[i] = init_vis_node(cur_wp.x, cur_wp.y, NB_WAYPOINT-2);
+    wp_nodes[i] = init_vis_node(cur_wp.x, cur_wp.y, vis_graph_size-2);
     vis_graph_ref[non_nfz_wps[i]] = wp_nodes[i];
     //connect to home if appropriate
-    if(is_visible(home, wp_nodes[i], num_nfzs, buffer_zones, nfz_sizes)) {
+    if(is_visible2(home, wp_nodes[i])) {
       add_neighbor(home, wp_nodes[i], 0);
       add_neighbor(wp_nodes[i], home, 0);
     }
@@ -1317,10 +1439,20 @@ struct vis_node *create_visibility_graph() {
     if(DEBUG_VIS_GRAPH_CREATION) printf("Checking wp #%d (%.1f, %.1f) against all buffer zones\n", i, wp_nodes[i]->x, wp_nodes[i]->y);
     for(int j = 0; j < num_nfzs; j++) {
       for(int k = 0; k < nfz_sizes[j]; k++) {
-	if(is_visible(wp_nodes[i], buffer_zones[j][k], num_nfzs, buffer_zones, nfz_sizes)) {
+	if(is_visible2(wp_nodes[i], buffer_zones[j][k])) {
 	  if(DEBUG_VIS_GRAPH_CREATION) printf("Adding neighbor (%.1f, %.1f)\n", buffer_zones[j][k]->x, buffer_zones[j][k]->y);
 	  add_neighbor(wp_nodes[i], buffer_zones[j][k], 0);
 	  add_neighbor(buffer_zones[j][k], wp_nodes[i], 0);
+	}
+      }
+    }
+    if(DEBUG_VIS_GRAPH_CREATION) printf("Now checking against all no-fly points\n");
+    for(int j = 0; j < NB_NOFLYPOINT; j++) {
+      for(int k = 0; k < 8; k++) {
+	const int index = NB_WAYPOINT + 8*j + k;
+	if(is_visible2(vis_graph_ref[index], wp_nodes[i])) {
+	  add_neighbor(vis_graph_ref[index], wp_nodes[i], 0);
+	  add_neighbor(wp_nodes[i], vis_graph_ref[index], 0);
 	}
       }
     }

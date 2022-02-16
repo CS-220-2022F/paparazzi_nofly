@@ -196,6 +196,7 @@ extern void nav_route_xy(float last_wp_x, float last_wp_y, float wp_x, float wp_
 #define DEBUG_NFZ_NAV 0
 
 extern float dest_x, dest_y;
+extern int vis_graph_size;
 
 #define NavSegment(_start, _end)					\
   do {									\

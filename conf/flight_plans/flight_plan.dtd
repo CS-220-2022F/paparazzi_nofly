@@ -6,8 +6,9 @@
 
 <!ELEMENT header (#PCDATA)>
 
-<!ELEMENT waypoints (waypoint+)>
+<!ELEMENT waypoints (waypoint|noflypoint)+>
 <!ELEMENT waypoint EMPTY>
+<!ELEMENT noflypoint EMPTY>
 
 <!ELEMENT sectors (sector|noflyzone|kml)*>
 <!ELEMENT sector (corner,corner,corner+)>
@@ -86,6 +87,16 @@ lat CDATA #IMPLIED
 lon CDATA #IMPLIED
 alt CDATA #IMPLIED
 height CDATA #IMPLIED>
+
+<!ATTLIST noflypoint
+name CDATA #REQUIRED
+x CDATA #IMPLIED
+y CDATA #IMPLIED
+lat CDATA #IMPLIED
+lon CDATA #IMPLIED
+alt CDATA #IMPLIED
+height CDATA #IMPLIED
+radius CDATA #REQUIRED>
 
 <!ATTLIST exceptions>
 
