@@ -201,8 +201,6 @@ void nav_move_waypoint(uint8_t wp_id, float ux, float uy, float alt)
     noflypoints[nfp_id].x = waypoints[WP_HOME].x + dx;
     noflypoints[nfp_id].y = waypoints[WP_HOME].y + dy;
     noflypoints[nfp_id].a = alt;
-    vis_graph_ref[nfp_id]->x = noflypoints[nfp_id].x;
-    vis_graph_ref[nfp_id]->y = noflypoints[nfp_id].y;
     reconstruct_visibility_graph(); 
     //reconstruct the current path
     temp_node = init_vis_node(GetPosX(), GetPosY(), vis_graph_size);

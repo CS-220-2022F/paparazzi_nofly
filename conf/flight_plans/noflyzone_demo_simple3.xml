@@ -27,7 +27,7 @@
     <waypoint name="d8" x="123.1" y="109.1"/>
     <waypoint name="d9" x="110.0" y="92.9"/>
     <waypoint name="dest" x="160" y="160"/>
-    <noflypoint name="test" x="66" y="50" radius="5"/>
+    <noflypoint name="test" x="66" y="50" radius="15"/>
   </waypoints>
   <sectors>
     <sector color="blue" name="exampleSector">
