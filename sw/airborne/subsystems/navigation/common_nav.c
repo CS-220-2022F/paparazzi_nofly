@@ -36,6 +36,8 @@ bool too_far_from_home;
 
 const uint8_t nb_waypoint = NB_WAYPOINT;
 struct point waypoints[NB_WAYPOINT] = WAYPOINTS_UTM;
+const uint8_t nb_noflypoint = NB_NOFLYPOINT;
+struct noflypoint noflypoints[NB_NOFLYPOINT] = NOFLYPOINTS_UTM;
 
 float ground_alt;
 
@@ -176,9 +178,8 @@ void nav_move_waypoint(uint8_t wp_id, float ux, float uy, float alt)
     vis_graph_ref[wp_id]->y = waypoints[wp_id].y;
     reconstruct_visibility_graph(); 
     //reconstruct the current path
-    temp_node = init_vis_node(GetPosX(), GetPosY(), NB_WAYPOINT);
-    for(int i = 1; i < NB_WAYPOINT; i++) {
-      printf("checking waypoint %d\n", i);
+    temp_node = init_vis_node(GetPosX(), GetPosY(), vis_graph_size);
+    for(int i = 1; i < vis_graph_size; i++) {
       if(is_visible2(temp_node, vis_graph_ref[i])) {
 	add_neighbor(temp_node, vis_graph_ref[i], 0);
       }
@@ -188,5 +189,29 @@ void nav_move_waypoint(uint8_t wp_id, float ux, float uy, float alt)
     PATH_START = astar_path(temp_node, end_node);
     CURR_NODE = PATH_START;
     //There shouldn't be leaks here, but if there are, free PATH_START then set it to CURR_NODE
+  }
+  else if(wp_id < nb_waypoint + nb_noflypoint) {
+    int nfp_id = wp_id - nb_waypoint;
+    float dx, dy;
+    dx = ux - nav_utm_east0 - waypoints[WP_HOME].x;
+    dy = uy - nav_utm_north0 - waypoints[WP_HOME].y;
+    BoundAbs(dx, max_dist_from_home);
+    BoundAbs(dy, max_dist_from_home);
+    //need to also move the corresponding visibility graph point
+    noflypoints[nfp_id].x = waypoints[WP_HOME].x + dx;
+    noflypoints[nfp_id].y = waypoints[WP_HOME].y + dy;
+    noflypoints[nfp_id].a = alt;
+    reconstruct_visibility_graph(); 
+    //reconstruct the current path
+    temp_node = init_vis_node(GetPosX(), GetPosY(), vis_graph_size);
+    for(int i = 1; i < NB_WAYPOINT; i++) {
+      if(is_visible2(temp_node, vis_graph_ref[i])) {
+	add_neighbor(temp_node, vis_graph_ref[i], 0);
+      }
+    }
+    struct vis_node *end_node = closest_node(HOME_NODE, dest_x, dest_y);
+    free_path(PATH_START);
+    PATH_START = astar_path(temp_node, end_node);
+    CURR_NODE = PATH_START;
   }
 }

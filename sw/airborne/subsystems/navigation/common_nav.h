@@ -42,6 +42,13 @@ struct point {
   float a;
 };
 
+struct noflypoint {
+  float x;
+  float y;
+  float a;
+  float radius;
+};
+
 #define WaypointX(_wp) (waypoints[_wp].x)
 #define WaypointY(_wp) (waypoints[_wp].y)
 /** waypoint altitude in m above MSL */
@@ -53,6 +60,9 @@ extern void nav_move_waypoint(uint8_t wp_id, float utm_east, float utm_north, fl
 extern const uint8_t nb_waypoint;
 extern struct point waypoints[];
 /** size == nb_waypoint, waypoint 0 is a dummy waypoint */
+
+extern const uint8_t nb_noflypoint;
+extern struct noflypoint noflypoints[];
 
 /** altitude of the ground in m above MSL */
 extern float ground_alt;

@@ -1,0 +1,81 @@
+<!DOCTYPE flight_plan SYSTEM "flight_plan.dtd">
+
+<flight_plan alt="600" ground_alt="380" lat0="37.2109800" lon0="-113.4567800" max_dist_from_home="500" name="NoFlyZoneTest" qfu="270" security_height="25">
+  <header>
+
+</header>
+  <waypoints>
+    <waypoint name="HOME" x="0" y="0"/>
+    <waypoint name="STDBY" x="0" y="75"/>
+    <waypoint name="CLIMB" x="-114.5" y="162.3"/>
+    <waypoint name="_c0" x="0" y="50"/>
+    <waypoint name="_c1" x="35" y="35"/>
+    <waypoint name="_c2" x="50" y="0"/>
+    <waypoint name="_c3" x="35" y="-35"/>
+    <waypoint name="_c4" x="0" y="-50"/>
+    <waypoint name="_c5" x="-35" y="-35"/>
+    <waypoint name="_c6" x="-50" y="0"/>
+    <waypoint name="_c7" x="-35" y="35"/>
+    <waypoint name="_d0" x="74.4" y="99.0"/>
+    <waypoint name="_d1" x="63.6" y="114.2"/>
+    <waypoint name="_d2" x="68.1" y="136.4"/>
+    <waypoint name="_d3" x="85.0" y="146.6"/>
+    <waypoint name="_d4" x="101.6" y="147.1"/>
+    <waypoint name="_d5" x="116.2" y="142.0"/>
+    <waypoint name="_d6" x="123.6" y="133.2"/>
+    <waypoint name="_d7" x="126.5" y="120.7"/>
+    <waypoint name="_d8" x="123.1" y="109.1"/>
+    <waypoint name="_d9" x="110.0" y="92.9"/>
+    <waypoint name="dest" x="294.2" y="218.9"/>
+    <waypoint name="dest2" x="12.3" y="326.7"/>
+    <waypoint name="_e0" x="160" y="160"/>
+    <waypoint name="_e1" x="263.9" y="123.6"/>
+    <waypoint name="_e2" x="241.3" y="183.3"/>
+    <waypoint name="_e3" x="131.8" y="236.0"/>
+    <waypoint name="_f0" x="-52.0" y="259.5"/>
+    <waypoint name="_f1" x="2.1" y="266.8"/>
+    <waypoint name="_f2" x="67.3" y="218.3"/>
+    <noflypoint name="nfp1" x="213" y="227.5" radius="7"/>
+    <noflypoint name="nfp2" x="-20" y="162.3" radius="10"/>
+  </waypoints>
+  <sectors>
+    <sector color="blue" name="exampleSector">
+      <corner name="_c0"/>
+      <corner name="_c1"/>
+      <corner name="_c2"/>
+      <corner name="_c3"/>
+      <corner name="_c4"/>
+      <corner name="_c5"/>
+      <corner name="_c6"/>
+      <corner name="_c7"/>
+    </sector>
+    <noflyzone color="red" name="keepOut">
+      <corner name="_d0"/>
+      <corner name="_d1"/>
+      <corner name="_d2"/>
+      <corner name="_d3"/>
+      <corner name="_d4"/>
+      <corner name="_d5"/>
+      <corner name="_d6"/>
+      <corner name="_d7"/>
+      <corner name="_d8"/>
+      <corner name="_d9"/>
+    </noflyzone>
+    <noflyzone color="orange" name="keepOut2">
+      <corner name="_e0"/>
+      <corner name="_e1"/>
+      <corner name="_e2"/>
+      <corner name="_e3"/>
+    </noflyzone>
+    <noflyzone color="yellow" name="keepOut3">
+      <corner name="_f0"/>
+      <corner name="_f1"/>
+      <corner name="_f2"/>
+    </noflyzone>
+  </sectors>
+  <blocks>
+    <block name="GoThroughNoFlyZones">
+      <path wpts="HOME, STDBY, dest, CLIMB,  dest2, HOME"/>
+    </block>
+  </blocks>
+</flight_plan>

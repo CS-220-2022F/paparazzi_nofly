@@ -166,6 +166,48 @@ let print_waypoint_global = fun out waypoint ->
     fprintf out " TRUE, \\\n"
   with _ -> fprintf out " FALSE, \\\n"
 
+(*do the same thing but for the no-fly points*)
+
+let print_noflypoint_utm = fun out default_alt waypoint ->
+  let (x, y) = (float_attrib waypoint "x", float_attrib waypoint "y")
+  and rad = float_attrib waypoint "radius"
+  and alt = try sof (float_attrib waypoint "height" +. !ground_alt) with _ -> default_alt in
+  let alt = try Xml.attrib waypoint "alt" with _ -> alt in
+  check_altitude (float_of_string alt) waypoint;
+  fprintf out " {%.1f, %.1f, %s, %.1f},\\\n" x y alt rad
+
+let print_noflypoint_enu = fun out utm0 default_alt waypoint ->
+  let (x, y) = (float_attrib waypoint "x", float_attrib waypoint "y")
+  and rad = float_attrib waypoint "radius"
+  and alt = try sof (float_attrib waypoint "height" +. !ground_alt) with _ -> default_alt in
+  let alt = try Xml.attrib waypoint "alt" with _ -> alt in
+  let ecef0 = Latlong.ecef_of_geo Latlong.WGS84 (Latlong.of_utm Latlong.WGS84 utm0) !ground_alt in
+  let ecef = Latlong.ecef_of_geo Latlong.WGS84 (Latlong.of_utm Latlong.WGS84 (Latlong.utm_add utm0 (x, y))) (float_of_string alt) in
+  let ned = Latlong.array_of_ned (Latlong.ned_of_ecef ecef0 ecef) in
+  fprintf out " {%.2f, %.2f, %.2f, %.2f}, /* ENU in meters  */ \\\n" ned.(1) ned.(0) (-.ned.(2)) rad
+
+let convert_angle = fun rad -> Int64.of_float (1e7 *. (Rad>>Deg)rad)
+
+let print_noflypoint_lla = fun out utm0 default_alt waypoint ->
+  let (x, y) = (float_attrib waypoint "x", float_attrib waypoint "y")
+  and rad = float_attrib waypoint "radius"
+  and alt = try sof (float_attrib waypoint "height" +. !ground_alt) with _ -> default_alt in
+  let alt = try Xml.attrib waypoint "alt" with _ -> alt in
+  let wgs84 = Latlong.of_utm Latlong.WGS84 (Latlong.utm_add utm0 (x, y)) in
+  fprintf out " {.lat=%Ld, .lon=%Ld, .alt=%.0f, .rad=%.1f}, /* 1e7deg, 1e7deg, mm (above NAV_MSL0, local msl=%.2fm) */ \\\n" (convert_angle wgs84.posn_lat) (convert_angle wgs84.posn_long) (1000. *. float_of_string alt) (Egm96.of_wgs84 wgs84) rad
+
+let print_noflypoint_lla_wgs84 = fun out utm0 default_alt waypoint ->
+  let (x, y) = (float_attrib waypoint "x", float_attrib waypoint "y")
+  and rad = float_attrib waypoint "radius"
+  and alt = try sof (float_attrib waypoint "height" +. !ground_alt) with _ -> default_alt in
+  let alt = try Xml.attrib waypoint "alt" with _ -> alt in
+  let wgs84 = Latlong.of_utm Latlong.WGS84 (Latlong.utm_add utm0 (x, y)) in
+  if Srtm.available wgs84 then
+    check_altitude_srtm (float_of_string alt) waypoint wgs84;
+  let alt = float_of_string alt +. Egm96.of_wgs84 wgs84 in
+  fprintf out " {.lat=%Ld, .lon=%Ld, .alt=%.0f, .rad=%.1f}, /* 1e7deg, 1e7deg, mm (above WGS84 ref ellipsoid) */ \\\n" (convert_angle wgs84.posn_lat) (convert_angle wgs84.posn_long) (1000. *. alt) rad
+
+
 let get_index_block = fun x ->
   try
     List.assoc x !index_of_blocks
@@ -716,8 +758,17 @@ let define_waypoints_indices = fun out wpts ->
     if c_suffix n then
       Xml2h.define_out out (sprintf "WP_%s" n) (string_of_int !i);
     incr i)
-    wpts
+  wpts
 
+let define_noflypoints_indices = fun out start_idx nfps ->
+  let i = ref start_idx in
+  List.iter (fun w ->
+    let n = name_of w in
+    if c_suffix n then
+      Xml2h.define_out out (sprintf "WP_%s" n) (string_of_int !i);
+    incr i)
+  nfps
+    
 let home = fun waypoints ->
   let rec loop i = function
   [] -> failwith "Waypoint 'HOME' required"
@@ -1047,6 +1098,7 @@ let print_auto_init_bindings = fun out abi_msgs variables iow wpts nfzs ->
   let nfz_sizes = List.map List.length nfzs in
   lprintf out "int nfz_sizes[%d] = {%s};\n" (List.length nfz_sizes) (String.concat ", " (List.map (sprintf "%d") nfz_sizes));
   lprintf out "int **nfz_borders;\n";
+  lprintf out "int vis_graph_size = NB_WAYPOINT + 8 * NB_NOFLYPOINT;\n";
   lprintf out "struct vis_node **vis_graph_ref;\n";
   lprintf out "struct vis_node *temp_node = NULL;\n\n";
   lprintf out "static inline void auto_nav_init(void) {\n";
@@ -1064,7 +1116,7 @@ let print_auto_init_bindings = fun out abi_msgs variables iow wpts nfzs ->
   List.iteri print_arr_nfz nfzs_as_strs; *)
   lprintf out "nfz_borders = (int **)calloc(%d, sizeof(int*));\n" (List.length nfz_sizes);
   List.iteri (fun i str -> lprintf out "nfz_borders[%d] = nfz%d;\n" i i) nfzs;
-  lprintf out "vis_graph_ref = (struct vis_node**)calloc(NB_WAYPOINT, sizeof(struct vis_node*));\n";
+  lprintf out "vis_graph_ref = (struct vis_node**)calloc(vis_graph_size, sizeof(struct vis_node*));\n";
   lprintf out "%s\n" "HOME_NODE = create_visibility_graph();";
   left();
   lprintf out "}\n\n"
@@ -1074,8 +1126,9 @@ let print_auto_init_bindings = fun out abi_msgs variables iow wpts nfzs ->
  *)
 let print_flight_plan_h = fun xml utm0 xml_file out_file ->
   let out = open_out out_file in
-
-  let waypoints = Xml.children (ExtXml.child xml "waypoints")
+  
+  let waypoints = List.filter (fun x -> Compat.lowercase_ascii (Xml.tag x) = "waypoint") (Xml.children (ExtXml.child xml "waypoints"))
+  and noflypoints = List.filter (fun x -> Compat.lowercase_ascii (Xml.tag x) = "noflypoint") (Xml.children (ExtXml.child xml "waypoints"))
   and variables = try Xml.children (ExtXml.child xml "variables") with _ -> []
   and blocks = Xml.children (ExtXml.child xml "blocks")
   and global_exceptions = try Xml.children (ExtXml.child xml "exceptions") with _ -> [] in
@@ -1154,6 +1207,7 @@ let print_flight_plan_h = fun xml utm0 xml_file out_file ->
   let (hx, hy) = home waypoints in
   List.iter (check_distance (hx, hy) mdfh) waypoints;
   define_waypoints_indices out waypoints;
+  define_noflypoints_indices out (List.length waypoints) noflypoints;
 
   Xml2h.define_out out "WAYPOINTS_UTM" "{ \\";
   List.iter (print_waypoint_utm out alt) waypoints;
@@ -1171,6 +1225,23 @@ let print_flight_plan_h = fun xml utm0 xml_file out_file ->
   List.iter (print_waypoint_global out) waypoints;
   lprintf out "};\n";
   Xml2h.define_out out "NB_WAYPOINT" (string_of_int (List.length waypoints));
+
+  Xml2h.define_out out "NOFLYPOINTS_UTM" "{ \\";
+  List.iter (print_noflypoint_utm out alt) noflypoints;
+  lprintf out "};\n";
+  Xml2h.define_out out "NOFLYPOINTS_ENU" "{ \\";
+  List.iter (print_noflypoint_enu out utm0 alt) noflypoints;
+  lprintf out "};\n";
+  Xml2h.define_out out "NOFLYPOINTS_LLA" "{ \\";
+  List.iter (print_noflypoint_lla out utm0 alt) noflypoints;
+  lprintf out "};\n";
+  Xml2h.define_out out "NOFLYPOINTS_LLA_WGS84" "{ \\";
+  List.iter (print_noflypoint_lla_wgs84 out utm0 alt) noflypoints;
+  lprintf out "};\n";
+  Xml2h.define_out out "NOFLYPOINTS_GLOBAL" "{ \\";
+  List.iter (print_waypoint_global out) noflypoints;
+  lprintf out "};\n";
+  Xml2h.define_out out "NB_NOFLYPOINT" (string_of_int (List.length noflypoints));
 
   Xml2h.define_out out "FP_BLOCKS" "{ \\";
   List.iter (fun b -> fprintf out " \"%s\" , \\\n" (ExtXml.attrib b "name")) blocks;
@@ -1240,11 +1311,6 @@ let print_flight_plan_h = fun xml utm0 xml_file out_file ->
   List.iter (fun v -> print_var_impl out abi_msgs v) variables;
   lprintf out "\n";
 
-  (* let center = int_of_float (ceil mdfh) in
-  let arr_size = 2 * center + 1 in
-  lprintf out "int occupancy_grid[%d][%d];\n" arr_size arr_size;
-  lprintf out "const int center = %d;\n\n" center;
-  lprintf out "static inline void update_occgrid(void);\n\n"; *)
   lprintf out "enum VISIT_STATUS {UNVISITED, VISITING, VISITED};\n";
   lprintf out "struct vis_node {\n";
   right();
@@ -1282,7 +1348,6 @@ let print_flight_plan_h = fun xml utm0 xml_file out_file ->
     let i = ref (-1) in
     List.map (fun w -> incr i; (name_of w, !i)) waypoints in
 
-  printf "\n%s\n" "Now parsing no-fly zones";
   let sectors_element = try ExtXml.child xml "sectors" with Not_found -> Xml.Element ("", [], []) in
   let noflyzones = List.filter (fun x -> Compat.lowercase_ascii (Xml.tag x) = "noflyzone") (Xml.children sectors_element) in
   let nfz_corners = List.map Xml.children noflyzones in
