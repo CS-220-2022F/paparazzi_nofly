@@ -82,6 +82,7 @@ extern struct vis_node *HOME_NODE;
 extern bool path_calculated;
 
 extern struct vis_node *temp_node;
+extern struct path_node *PATH_START, *CURR_NODE;
 
 extern int nav_mode;
 #define NAV_MODE_ROLL 1

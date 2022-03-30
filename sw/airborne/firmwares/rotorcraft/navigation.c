@@ -742,4 +742,841 @@ void nav_follow(uint8_t ac_id, uint32_t distance, uint32_t height)
 #else*/
 void nav_follow(uint8_t  __attribute__((unused)) _ac_id, uint32_t  __attribute__((unused)) distance,
                 uint32_t  __attribute__((unused)) height) {}
+
+/**
+ * BEGIN FOR NO FLY ZONES
+ **/
+
+int intersect_two_lines_absolute(float *x_i, float *y_i, float ax0, float ay0, float ax1, float ay1, float bx0, float by0, float bx1, float by1) {
+  float mb = (by1 - by0) / (bx1 - bx0), ma = (ay1 - ay0) / (ax1 - ax0);
+  if(ma == mb) {
+    return 0;
+  }
+  float denom = (ay1 - ay0) * (bx1 - bx0) - (by1 - by0) * (ax1 - ax0);
+  float num_a = (by0 - ay0) * (bx1 - bx0) - (bx0 - ax0) * (by1 - by0);
+  float num_b = (by0 - ay0) * (ax1 - ax0) - (bx0 - ax0) * (ay1 - ay0);
+  float fac_a = num_a / denom, fac_b = num_b / denom;
+  if(fac_a <= 0 || fac_a >= 1) {
+    return 0;
+  }
+  if(fac_b <= 0 || fac_b >= 1) {
+    return 0;
+  }
+
+  *x_i = ax0 + fac_a * (ax1 - ax0);
+  *y_i = ay0 + fac_a * (ay1 - ay0);
+  return 1;
+}
+
+//formula from Wikipedia:
+//https://en.wikipedia.org/wiki/Centroid#Of_a_polygon
+float * centroid(int num_verts, coords *verts) {
+  int i = 0;
+  float *C = calloc(2, sizeof(float));
+  float A = verts[num_verts-1][0] * verts[0][1] - verts[0][0] * verts[num_verts-1][1];
+  float Cx = (verts[num_verts-1][0] + verts[0][0]) * (verts[num_verts-1][0]*verts[0][1] - verts[0][0]*verts[num_verts-1][1]),
+    Cy = (verts[num_verts-1][1] + verts[0][1]) * (verts[num_verts-1][0]*verts[0][1] - verts[0][0]*verts[num_verts-1][1]);
+  for(i=0; i < num_verts-1; i++) {
+    A += verts[i][0]*verts[i+1][1] - verts[i+1][0]*verts[i][1];
+    Cx += (verts[i][0] + verts[i+1][0]) * (verts[i][0]*verts[i+1][1] - verts[i][1]*verts[i+1][0]);
+    Cy += (verts[i][1] + verts[i+1][1]) * (verts[i][0]*verts[i+1][1] - verts[i][1]*verts[i+1][0]);
+  }
+  A /= 2;
+  Cx /= (6 * A);
+  Cy /= (6 * A);
+  C[0] = Cx;
+  C[1] = Cy;
+  return C;
+}
+
+//TODO come up with a way to make the ratio shrink as the NFZ grows; for now use area
+coords *buffer_zone(int num_verts, int *verts) {
+  const float RATIO = 1.25;
+  coords verts_as_coords[num_verts];
+  for(int i = 0; i < num_verts; i++) {
+    verts_as_coords[i][0] = (float)waypoints[verts[i]].enu_i.x;
+    verts_as_coords[i][1] = (float)waypoints[verts[i]].enu_i.y;
+  }
+  float area = 0;
+  for(int i = 0; i < num_verts; i++) {
+    area += verts_as_coords[i][0] * verts_as_coords[(i+1)%num_verts][1] - verts_as_coords[(i+1)%num_verts][0] * verts_as_coords[i][1];
+  }
+  if(0 > area) area = -area;
+  area /= 2;
+  float *c = centroid(num_verts, verts_as_coords);
+  coords *bz = (coords *)calloc(sizeof(coords), num_verts);
+  for(int i = 0; i < num_verts; i++) {
+    bz[i][0] = c[0] + RATIO * (verts_as_coords[i][0] - c[0]);
+    bz[i][1] = c[1] + RATIO * (verts_as_coords[i][1] - c[1]);
+  }
+  return bz;
+}
+
+//The following enum and structs are now defined in the generated flight plan,
+//but it's useful to have them as comments here for reference
+/*enum VISIT_STATUS {UNVISITED, VISITING, VISITED};
+
+//int node_id_gen = 0;
+
+struct vis_node {
+  int num_neighbors;
+  int capacity;
+  struct vis_node **neighbors;
+  int *weights;
+  float x, y;
+  int node_id;
+  enum VISIT_STATUS status;
+  };*/
+
+/*struct path_node {
+  struct vis_node *wp;
+  struct path_node *next;
+  };
+
+struct astar_node {
+  struct vis_node *wp;
+  struct astar_node *next;
+  float priority;
+  float dist_so_far;
+  struct astar_node *parent; //NOT prev! not a doubly linked list!
+  }*/
+
+struct vis_node *init_vis_node(float x_in, float y_in, int capacity) {
+  static int node_id_gen = 0;
+  node_id_gen++;
+  struct vis_node ret = {0, capacity, calloc(capacity, sizeof(struct vis_node*)), calloc(capacity, sizeof(int)), x_in, y_in, node_id_gen, UNVISITED};
+  struct vis_node *ptr = (struct vis_node*)calloc(1, sizeof(struct vis_node));
+  memcpy(ptr, &ret, sizeof(ret));
+  return ptr;
+}
+
+struct path_node *init_path_node(struct vis_node *vn, struct path_node *prev) {
+  struct path_node *ret = calloc(1, sizeof(struct path_node));
+  if(NULL != prev) {
+    prev->next = ret;
+  }
+  ret->wp = vn;
+  ret->next = NULL;
+  return ret;
+}
+
+struct astar_node *init_first_astar_node(struct vis_node *first, struct vis_node *target) {
+  struct astar_node *ret = calloc(1, sizeof(struct astar_node));
+  ret->wp = first;
+  ret->priority = sqrt(DistanceSquare(first->x, first->y, target->x, target->y));
+  ret->dist_so_far = 0.0f;
+  ret->next = NULL;
+  ret->parent = NULL;
+  return ret;
+}
+
+struct astar_node *init_astar_node(struct astar_node *parent, struct vis_node *next, struct vis_node *target, float dist_so_far) {
+  struct astar_node *ret = calloc(1, sizeof(struct astar_node));
+  ret->wp = next;
+  ret->next = NULL;
+  ret->priority = dist_so_far + sqrt(DistanceSquare(next->x, next->y, target->x, target->y));
+  ret->dist_so_far = dist_so_far;
+  ret->parent = parent;
+  return ret;
+}
+
+struct astar_node *astar_pop(struct astar_node **head) {
+  if(NULL == head || NULL == *head) return NULL;
+  struct astar_node *ret = *head;
+  *head = (*head)->next;
+  return ret;
+}
+
+struct astar_node *astar_insert(struct astar_node *head, struct astar_node *next) {
+  if(!head) return next;
+  if(!next) return head;
+  if(head->priority > next->priority) {
+    next->next = head;
+    return next;
+  }
+  struct astar_node *prev = head;
+  while(NULL != prev->next && prev->next->priority <= next->priority) prev = prev->next;
+  next->next = prev->next;
+  prev->next = next;
+  return head;
+}
+
+void astar_free(struct astar_node *start) {
+  struct astar_node *next = NULL;
+  for(struct astar_node *p = start; NULL != p; p = next) {
+    next = p->next;
+    free(p);
+  }
+}
+
+//return:
+//1 if the neighbor was successfully added
+//0 if it was not successfully added
+//-1 if it was already a neighbor
+int add_neighbor(struct vis_node *node, struct vis_node *new_neighbor, int weight) {
+  //make sure we don't add the same neighbor twice
+  for(int i = 0; i < node->num_neighbors; i++) {
+    if(node->neighbors[i]->x == new_neighbor->x &&
+       node->neighbors[i]->y == new_neighbor->y) {
+      return -1;
+    }
+  }
+  //add the neighbor and return "true" if possible
+  if(node->num_neighbors < node->capacity) {
+    node->neighbors[node->num_neighbors] = new_neighbor;
+    node->weights[node->num_neighbors] = weight;
+    node->num_neighbors++;
+    return 1;
+  }
+  //return "false" if unable to add the new neighbor
+  return 0;
+}
+
+int is_visible(struct vis_node *p1, struct vis_node *p2, int num_bzs, struct vis_node ***bzs, int *bz_sizes) {
+  float ipx, ipy;
+  for(int i = 0; i < num_bzs; i++) {
+    for(int j = 0; j < bz_sizes[i]; j++) {
+      if (intersect_two_lines_absolute(&ipx, &ipy,
+				      p1->x, p1->y, p2->x, p2->y,
+				      bzs[i][j]->x, bzs[i][j]->y,
+				      bzs[i][(j+1)%(bz_sizes[i])]->x,
+				       bzs[i][(j+1)%(bz_sizes[i])]->y)) {
+	return 0;
+      }
+      else {
+      }
+    }
+  }
+  return 1;
+}
+
+//based solely on the existing visibility graph
+int is_visible2(struct vis_node *p1, struct vis_node *p2) {
+  float ipx, ipy;
+  for(int i = 0; i < num_nfzs; i++) {
+    for(int j = 0; j < nfz_sizes[i]; j++) {
+      if(intersect_two_lines_absolute(&ipx, &ipy,
+			     p1->x, p1->y, p2->x, p2->y,
+			     vis_graph_ref[nfz_borders[i][j]]->x, vis_graph_ref[nfz_borders[i][j]]->y,
+			     vis_graph_ref[nfz_borders[i][(j+1)%nfz_sizes[i]]]->x,
+			     vis_graph_ref[nfz_borders[i][(j+1)%nfz_sizes[i]]]->y)) {
+	return 0;
+      }
+    }
+  }
+  for(int i = 0; i < NB_NOFLYPOINT; i++) {
+    for(int j = 0; j < 8; j++) {
+      if(intersect_two_lines_absolute(&ipx, &ipy, p1->x, p1->y, p2->x, p2->y,
+				      vis_graph_ref[NB_WAYPOINT + 8*i + j]->x,
+				      vis_graph_ref[NB_WAYPOINT + 8*i + j]->y,
+				      vis_graph_ref[NB_WAYPOINT + 8*i + (j+1)%8]->x,
+				      vis_graph_ref[NB_WAYPOINT + 8*i + (j+1)%8]->y)) {
+	return 0;
+      }
+    }
+  }
+  return 1;
+}
+
+int num_nodes;
+struct vis_node **nodes;
+
+bool is_nfz_corner(const int index, int num_nfzs, int **nfzs, int *nfz_sizes) {
+  for(int i = 0; i < num_nfzs; i++) {
+    for(int j = 0; j < nfz_sizes[i]; j++) {
+      if(index == nfzs[i][j]) return true;
+    }
+  }
+  return false;
+}
+
+//Remove all edges in the visibility graph and recalculate them. Should be used every time a waypoint is moved.
+
+void reconstruct_visibility_graph() {
+  //clear the connections
+  for(int i = 1; i < vis_graph_size; i++) {
+    vis_graph_ref[i]->num_neighbors = 0;
+  }
+  //get the indices of the non-NFZ waypoints
+  int non_nfz_wp_ct = 0;
+  int non_nfz_wps[NB_WAYPOINT-1];
+  for(int i = 1; i < vis_graph_size; i++) {
+    bool isCorner = is_nfz_corner(i, num_nfzs, nfz_borders, nfz_sizes);
+    if(!isCorner) {
+      non_nfz_wps[non_nfz_wp_ct] = i;
+      non_nfz_wp_ct++;
+    }
+  }
+  //get and connect all the buffer zones
+  for(int i = 0; i < num_nfzs; i++) {
+    //get the buffer zone for the current NFZ
+    coords *bfz = buffer_zone(nfz_sizes[i], nfz_borders[i]);
+    //move the existing visibility graph nodes to their new spots, if necessary
+    for(int j = 0; j < nfz_sizes[i]; j++) {
+      vis_graph_ref[nfz_borders[i][j]]->x = bfz[j][0];
+      vis_graph_ref[nfz_borders[i][j]]->y = bfz[j][1];
+    }
+    //connect each NFZ to itself
+    for(int j = 0; j < nfz_sizes[i]; j++) {
+      if(add_neighbor(vis_graph_ref[nfz_borders[i][j]], vis_graph_ref[nfz_borders[i][(j+1)%nfz_sizes[i]]], 1) &&
+	 add_neighbor(vis_graph_ref[nfz_borders[i][(j+1)%nfz_sizes[i]]], vis_graph_ref[nfz_borders[i][j]], 1)) {
+	//successfully connected this vertex with the next; carry on
+      }
+      else {
+	printf("ERROR: Failed to reconnect no-fly zone %d\n", i);
+	exit(1);
+      }
+    }
+  }
+  //now redo all the no-fly points
+  float denom = (float)(1 + sqrt(2));
+  for(int i = 0; i < NB_NOFLYPOINT; i++) {
+    float x = noflypoints[i].enu_f.x, y = noflypoints[i].enu_f.y, rad = noflypoints[i].radius;
+    vis_graph_ref[NB_WAYPOINT + 8*i]->x = x - rad/denom;
+    vis_graph_ref[NB_WAYPOINT + 8*i]->y = y + rad;
+    vis_graph_ref[NB_WAYPOINT + 8*i + 1]->x = x + rad/denom;
+    vis_graph_ref[NB_WAYPOINT + 8*i + 1]->y = y + rad;
+    vis_graph_ref[NB_WAYPOINT + 8*i + 2]->x = x + rad;
+    vis_graph_ref[NB_WAYPOINT + 8*i + 2]->y = y + rad/denom;
+    vis_graph_ref[NB_WAYPOINT + 8*i + 3]->x = x + rad;
+    vis_graph_ref[NB_WAYPOINT + 8*i + 3]->y = y - rad/denom;
+    vis_graph_ref[NB_WAYPOINT + 8*i + 4]->x = x + rad/denom;
+    vis_graph_ref[NB_WAYPOINT + 8*i + 4]->y = y - rad;
+    vis_graph_ref[NB_WAYPOINT + 8*i + 5]->x = x - rad/denom;
+    vis_graph_ref[NB_WAYPOINT + 8*i + 5]->y = y - rad;
+    vis_graph_ref[NB_WAYPOINT + 8*i + 6]->x = x - rad;
+    vis_graph_ref[NB_WAYPOINT + 8*i + 6]->y = y - rad/denom;
+    vis_graph_ref[NB_WAYPOINT + 8*i + 7]->x = x - rad;
+    vis_graph_ref[NB_WAYPOINT + 8*i + 7]->y = y + rad/denom;
+    for(int j = 0; j < 8; j++) {
+      const int index = NB_WAYPOINT + 8*i + j;
+      const int next_pt = NB_WAYPOINT + 8*i + (j+1)%8;
+      add_neighbor(vis_graph_ref[index], vis_graph_ref[next_pt], 1);
+      add_neighbor(vis_graph_ref[next_pt], vis_graph_ref[index], 1);
+    }
+  }
+  //connect all the no-fly zones to each other
+  for(int i = 0; i < NB_NOFLYPOINT; i++) {
+    for(int j = 0; j < 8; j++) {
+      const int index = NB_WAYPOINT + 8*i + j;
+      if(is_visible2(vis_graph_ref[index], HOME_NODE)) {
+	add_neighbor(HOME_NODE, vis_graph_ref[index], 0);
+	add_neighbor(vis_graph_ref[index], HOME_NODE, 0);
+      }
+      for(int k = i+1; k < NB_NOFLYPOINT; k++) {
+	for(int l = 0; l < 8; l++) {
+	  const int index2 = NB_WAYPOINT + 8*k + l;
+	  if(is_visible2(vis_graph_ref[index], vis_graph_ref[index2])) {
+	    add_neighbor(vis_graph_ref[index], vis_graph_ref[index2], 0);
+	    add_neighbor(vis_graph_ref[index2], vis_graph_ref[index], 0);
+	  }
+	}
+      }
+    }
+  }
+  for(int i = 0; i < num_nfzs; i++) {
+    for(int j = 0; j < nfz_sizes[i]; j++) {
+      //connect to home wp
+      if(is_visible2(HOME_NODE, vis_graph_ref[nfz_borders[i][j]])) {
+	add_neighbor(HOME_NODE, vis_graph_ref[nfz_borders[i][j]], 0);
+	add_neighbor(vis_graph_ref[nfz_borders[i][j]], HOME_NODE, 0);
+      }
+      for(int k = 0; k < num_nfzs; k++) {
+	if(k == i) continue;
+	for(int l = 0; l < nfz_sizes[k]; l++) {
+	  //connect to other NFZ
+	  if(is_visible2(vis_graph_ref[nfz_borders[i][j]], vis_graph_ref[nfz_borders[k][l]])) {
+	    add_neighbor(vis_graph_ref[nfz_borders[i][j]], vis_graph_ref[nfz_borders[k][l]], 0);
+	  }
+	}
+      }
+      for(int k = 0; k < NB_NOFLYPOINT; k++) {
+	for(int l = 0; l < 8; l++) {
+	  const int index = NB_WAYPOINT + 8*k + l;
+	  if(is_visible2(vis_graph_ref[index], vis_graph_ref[nfz_borders[i][j]])) {
+	    add_neighbor(vis_graph_ref[index], vis_graph_ref[nfz_borders[i][j]], 0);
+	    add_neighbor(vis_graph_ref[nfz_borders[i][i]], vis_graph_ref[index], 0);
+	  }
+	}
+      }
+    }
+  }
+  //reconnect all the non-NFZ waypoints
+  for(int i = 0; i < non_nfz_wp_ct; i++) {
+    if(WP_HOME == non_nfz_wps[i]) continue;
+    //connect to home
+    if(is_visible2(vis_graph_ref[WP_HOME], vis_graph_ref[non_nfz_wps[i]])) {
+      add_neighbor(vis_graph_ref[WP_HOME], vis_graph_ref[non_nfz_wps[i]], 0);
+      add_neighbor(vis_graph_ref[non_nfz_wps[i]], vis_graph_ref[WP_HOME], 0);
+    }
+    //connect to the no-fly zones
+    for(int j = 0; j < num_nfzs; j++) {
+      for(int k = 0; k < nfz_sizes[j]; k++) {
+	if(is_visible2(vis_graph_ref[non_nfz_wps[i]], vis_graph_ref[nfz_borders[j][k]])) {
+	  add_neighbor(vis_graph_ref[non_nfz_wps[i]], vis_graph_ref[nfz_borders[j][k]], 0);
+	  add_neighbor(vis_graph_ref[nfz_borders[j][k]], vis_graph_ref[non_nfz_wps[i]], 0);
+	}
+      }
+    }
+    for(int j = 0; j < NB_NOFLYPOINT; j++) {
+      for(int k = 0; k < 8; k++) {
+	const int index = NB_WAYPOINT + 8*j + k;
+	if(is_visible2(vis_graph_ref[index], vis_graph_ref[non_nfz_wps[i]])) {
+	  add_neighbor(vis_graph_ref[index], vis_graph_ref[non_nfz_wps[i]], 0);
+	  add_neighbor(vis_graph_ref[non_nfz_wps[i]], vis_graph_ref[index], 0);
+	}
+      }
+    }
+    //connect to the other non-NFZ waypoints
+    for(int j = 0; j < i; j++) {
+      if(WP_HOME == j) continue;
+      if(is_visible2(vis_graph_ref[non_nfz_wps[i]], vis_graph_ref[non_nfz_wps[j]])) {
+	add_neighbor(vis_graph_ref[non_nfz_wps[i]], vis_graph_ref[non_nfz_wps[j]], 0);
+	add_neighbor(vis_graph_ref[non_nfz_wps[j]], vis_graph_ref[non_nfz_wps[i]], 0);
+      }
+    }
+  }
+}
+
+//Free the visibility graph.
+void free_visibility_graph(struct vis_node *home) {
+  home->status = VISITING;
+  for(int i = 0; i < home->num_neighbors; i++) {
+    if(UNVISITED == home->neighbors[i]->status) {
+      free_visibility_graph(home->neighbors[i]);
+    }
+  }
+  free(home);
+}
+
+//Create the visibility graph.
+struct vis_node *create_visibility_graph() {
+  int **nfzs = nfz_borders;
+  //Before even creating any points, need to filter the waypoints
+  int non_nfz_wp_ct = 0;
+  int non_nfz_wps[NB_WAYPOINT-1];
+  //note: there is an invisible dummy waypoint at index 0 that might get in the way
+  for(int i = 1; i < NB_WAYPOINT; i++) {
+    bool isCorner = is_nfz_corner(i, num_nfzs, nfzs, nfz_sizes);
+    if(!isCorner) {
+      non_nfz_wps[non_nfz_wp_ct] = i;
+      non_nfz_wp_ct++;
+    }
+  }
+  //first, add home - need a reference point
+  struct vis_node *home = init_vis_node((float)waypoints[WP_HOME].enu_i.x, (float)waypoints[WP_HOME].enu_i.y, vis_graph_size-1);
+  vis_graph_ref[WP_HOME] = home;
+  struct vis_node ***buffer_zones = (struct vis_node***)calloc(num_nfzs, sizeof(struct vis_node**));
+  //now, create a representation of each no-fly zone's buffer zone
+  for(int i = 0; i < num_nfzs; i++) {
+    coords *bfz = buffer_zone(nfz_sizes[i], nfzs[i]);
+    buffer_zones[i] = (struct vis_node**)calloc(nfz_sizes[i], sizeof(struct vis_node*));
+    //create the nodes for the buffer zone vertices
+    for(int j = 0; j < nfz_sizes[i]; j++) {
+      buffer_zones[i][j] = init_vis_node(bfz[j][0], bfz[j][1], vis_graph_size - nfz_sizes[i] + 2);
+      vis_graph_ref[nfzs[i][j]] = buffer_zones[i][j];
+    }
+    //connect them
+    for(int j = 0; j < nfz_sizes[i]; j++) {
+      if(add_neighbor(buffer_zones[i][j], buffer_zones[i][(j+1)%(nfz_sizes[i])], 1) &&
+	 add_neighbor(buffer_zones[i][(j+1)%(nfz_sizes[i])], buffer_zones[i][j], 1)) {
+	//successfully connected this vertex with the next; carry on
+      }
+      else {
+	printf("ERROR: Failed to connect no-fly zone %d\n", i);
+	return NULL;
+      }
+    }
+  }
+  //Now create no-fly zones for the no-fly points
+  float denom = (float)(1 + sqrt(2));
+  for(int i = 0; i < NB_NOFLYPOINT; i++) {
+    struct vis_node **cur_nfz = (struct vis_node **)calloc(8, sizeof(struct vis_node*));
+    int rad = noflypoints[i].radius;
+    float x = (float)noflypoints[i].enu_i.x, y = (float)noflypoints[i].enu_i.y;
+    cur_nfz[0] = init_vis_node(x - rad/denom, y + rad, vis_graph_size - 1);
+    cur_nfz[1] = init_vis_node(x + rad/denom, y + rad, vis_graph_size - 1);
+    cur_nfz[2] = init_vis_node(x + rad, y + rad/denom, vis_graph_size - 1);
+    cur_nfz[3] = init_vis_node(x + rad, y - rad/denom, vis_graph_size - 1);
+    cur_nfz[4] = init_vis_node(x + rad/denom, y - rad, vis_graph_size - 1);
+    cur_nfz[5] = init_vis_node(x - rad/denom, y - rad, vis_graph_size - 1);
+    cur_nfz[6] = init_vis_node(x - rad, y - rad/denom, vis_graph_size - 1);
+    cur_nfz[7] = init_vis_node(x - rad, y + rad/denom, vis_graph_size - 1);
+    for(int j = 0; j < 8; j++) {
+      vis_graph_ref[NB_WAYPOINT + 8*i + j] = cur_nfz[j];
+      add_neighbor(cur_nfz[i], cur_nfz[(i+1)%8], 1);
+      add_neighbor(cur_nfz[(i+1)%8], cur_nfz[i], 1);
+    }
+    free(cur_nfz);
+  }
+  //now, connect all the no-fly zones to each other
+  for(int i = 0; i < num_nfzs; i++) {
+    for(int j = 0; j < nfz_sizes[i]; j++) {
+      for(int k = 0; k < num_nfzs; k++) {
+	if(k == i) continue;
+	for(int l = 0; l < nfz_sizes[k]; l++) {
+	  if(is_visible2(buffer_zones[i][j], buffer_zones[k][l])) {
+	    //don't need to add both ways here since it'll be done by the loops
+	    add_neighbor(buffer_zones[i][j], buffer_zones[k][l], 0);
+	  }
+	}
+      }
+      for(int k = 0; k < NB_NOFLYPOINT; k++) {
+	for(int l = 0; l < 8; l++) {
+	  if(is_visible2(buffer_zones[i][j], vis_graph_ref[NB_WAYPOINT + 8*k + l])) {
+	    add_neighbor(buffer_zones[i][j], vis_graph_ref[NB_WAYPOINT + 8*k + l], 0);
+	    add_neighbor(vis_graph_ref[NB_WAYPOINT + 8*k + l], buffer_zones[i][j], 0);
+	  }
+	}
+      }
+    }
+  }
+  for(int i = 0; i < NB_NOFLYPOINT; i++) {
+    for(int j = 0; j < 8; j++) {
+      const int index = NB_WAYPOINT + 8*i + j;
+      if(is_visible2(home, vis_graph_ref[index])) {
+	add_neighbor(home, vis_graph_ref[index], 0);
+	add_neighbor(vis_graph_ref[index], home, 0);
+      }
+      for(int k = i+1; k < NB_NOFLYPOINT; k++) {
+	for(int l = 0; l < 8; l++) {
+	  const int index2 = NB_WAYPOINT + 8*k + l;
+	  if(is_visible2(vis_graph_ref[index], vis_graph_ref[index2])) {
+	    add_neighbor(vis_graph_ref[index], vis_graph_ref[index2], 0);
+	    add_neighbor(vis_graph_ref[index2], vis_graph_ref[index], 0);
+	  }
+	}
+      }
+    }
+  }
+  for(int i = 0; i < num_nfzs; i++) {
+    for(int j = 0; j < nfz_sizes[i]; j++) {
+      if(is_visible2(home, buffer_zones[i][j])) {
+	add_neighbor(buffer_zones[i][j], home, 0);
+	add_neighbor(home, buffer_zones[i][j], 0);
+      }
+    }
+  }
+  //finally, add all the other waypoints to the graph
+  struct vis_node **wp_nodes = (struct vis_node**)calloc(non_nfz_wp_ct, sizeof(struct vis_node*));
+  for(int i = 0; i < non_nfz_wp_ct; i++) {
+    struct EnuCoor_i cur_wp = waypoints[non_nfz_wps[i]].enu_i;
+    //if it's home, skip
+    if(WP_HOME == non_nfz_wps[i]) {
+      continue;
+    }
+    wp_nodes[i] = init_vis_node((float)cur_wp.x, (float)cur_wp.y, vis_graph_size-2);
+    vis_graph_ref[non_nfz_wps[i]] = wp_nodes[i];
+    //connect to home if appropriate
+    if(is_visible2(home, wp_nodes[i])) {
+      add_neighbor(home, wp_nodes[i], 0);
+      add_neighbor(wp_nodes[i], home, 0);
+    }
+    //next, check against all the buffer zones
+    for(int j = 0; j < num_nfzs; j++) {
+      for(int k = 0; k < nfz_sizes[j]; k++) {
+	if(is_visible2(wp_nodes[i], buffer_zones[j][k])) {
+	  add_neighbor(wp_nodes[i], buffer_zones[j][k], 0);
+	  add_neighbor(buffer_zones[j][k], wp_nodes[i], 0);
+	}
+      }
+    }
+    for(int j = 0; j < NB_NOFLYPOINT; j++) {
+      for(int k = 0; k < 8; k++) {
+	const int index = NB_WAYPOINT + 8*j + k;
+	if(is_visible2(vis_graph_ref[index], wp_nodes[i])) {
+	  add_neighbor(vis_graph_ref[index], wp_nodes[i], 0);
+	  add_neighbor(wp_nodes[i], vis_graph_ref[index], 0);
+	}
+      }
+    }
+    //have to check against all other waypoints too
+    for(int j = 0; j < i; j++) {
+      struct EnuCoor_f added_wp = waypoints[non_nfz_wps[j]].enu_f;
+      //if it's home, skip
+      if((added_wp.x == waypoints[WP_HOME].enu_f.x) && (added_wp.y == waypoints[WP_HOME].enu_f.y)) {
+	continue;
+      }
+      if(is_visible(wp_nodes[i], wp_nodes[j], num_nfzs, buffer_zones, nfz_sizes)) {
+	add_neighbor(wp_nodes[i], wp_nodes[j], 0);
+	add_neighbor(wp_nodes[j], wp_nodes[i], 0);
+      }
+    }
+  }
+  //print_visibility_graph(home, 0);
+  return home;
+}
+
+//resetting visit status, depth-first
+void reset_visit_statuses(struct vis_node *home) {
+  home->status = VISITING;
+  for(int i = 0; i < home->num_neighbors; i++) {
+    if(VISITED == home->neighbors[i]->status) {
+      reset_visit_statuses(home->neighbors[i]);
+    }
+    //this line should not be necessary but it seems to be
+    if(VISITING == home->neighbors[i]->status) home->neighbors[i]->status = UNVISITED;
+  }
+  home->status = UNVISITED;
+}
+
+//depth-first traversal
+void print_visibility_graph(struct vis_node *home, int depth) {
+  home->status = VISITING;
+  if(0 == home->num_neighbors) {
+    printf("Depth %d: Node %d has no neighbors.\n", depth, home->node_id);
+  }
+  else if(1 == home->num_neighbors) {
+    printf("Depth %d: Node %d has one neighbor: %d(%.1f, %.1f)\n", depth, home->node_id, home->neighbors[0]->node_id, home->neighbors[0]->x, home->neighbors[0]->y);
+  }
+  else {
+    printf("Depth %d: Node %d (%.1f, %.1f) has %d neighbors: ", depth, home->node_id, home->x, home->y, home->num_neighbors);
+    for(int i = 0; i < home->num_neighbors; i++) {
+      printf("%d(%.1f, %.1f)%s", home->neighbors[i]->node_id, home->neighbors[i]->x, home->neighbors[i]->y, ((home->num_neighbors == i+1)?("\n"):(", ")));
+    }
+  }
+  for(int i = 0; i < home->num_neighbors; i++) {
+    if(UNVISITED == home->neighbors[i]->status) {
+      print_visibility_graph(home->neighbors[i], depth+1);
+    }
+  }
+  home->status = VISITED;
+  //make sure the state changes back so we can traverse the graph again
+  if(0 == depth) {
+    reset_visit_statuses(home);
+  }
+}
+
+struct vis_node *best_neighbor(struct vis_node *current, struct vis_node *dest) {
+  float min_dist = FLT_MAX;
+  struct vis_node *ret = NULL;
+  for(int i = 0; i < current->num_neighbors; i++) {
+    if(UNVISITED == current->neighbors[i]->status) {
+      float cur_dist = sqrt(DistanceSquare(current->x, current->y, current->neighbors[i]->x, current->neighbors[i]->y)) + sqrt(DistanceSquare(dest->x, dest->y, current->neighbors[i]->x, current->neighbors[i]->y));
+      if(min_dist > cur_dist) {
+	min_dist = cur_dist;
+	ret = current->neighbors[i];
+      }
+    }
+  }
+  if(NULL == ret) {
+    printf("All neighbors have been visited??\n");
+  }
+  return ret;
+}
+
+struct vis_node *best_neighbor_xy(struct vis_node *current, float dest_x, float dest_y) {
+  float min_dist = FLT_MAX;
+  struct vis_node *ret = NULL;
+  for(int i = 0; i < current->num_neighbors; i++) {
+    float cur_dist = sqrt(DistanceSquare(current->x, current->y, current->neighbors[i]->x, current->neighbors[i]->y)) + sqrt(DistanceSquare(dest_x, dest_y, current->neighbors[i]->x, current->neighbors[i]->y));
+    if(min_dist > cur_dist) {
+      min_dist = cur_dist;
+      ret = current->neighbors[i];
+    }
+  }
+  return ret;
+}
+
+struct vis_node *closest_node_helper(struct vis_node *home, float target_x, float target_y, float closest_distsq_so_far) {
+  home->status = VISITING;
+  if(home->num_neighbors < 1) return home;
+  if((home->x == target_x) && (home->y == target_y)) return home;
+  struct vis_node *closest = NULL;
+  float xdist = home->x - target_x, ydist = home->y - target_y;
+  float home_distsq = xdist*xdist + ydist*ydist;
+  if(home_distsq < closest_distsq_so_far) {
+    closest = home;
+    closest_distsq_so_far = home_distsq;
+  }
+  for(int i = 0; i < home->num_neighbors; i++) {
+    if(UNVISITED == home->neighbors[i]->status) {
+      struct vis_node *temp = closest_node_helper(home->neighbors[i], target_x, target_y, closest_distsq_so_far);
+      xdist = temp->x - target_x;
+      ydist = temp->y - target_y;
+      float cur_distsq = xdist*xdist + ydist*ydist;
+      if(cur_distsq < closest_distsq_so_far) {
+	closest = temp;
+	closest_distsq_so_far = cur_distsq;
+      }
+    }
+  }
+  home->status = VISITED;
+  if(NULL == closest) closest = home;
+  return closest;
+}
+
+struct vis_node *closest_node(struct vis_node *home, float target_x, float target_y) {
+  reset_visit_statuses(home);
+  if(home->x == target_x && home->y == target_y) {
+    return home;
+  }
+  struct vis_node *closest = closest_node_helper(home, target_x, target_y, MAX_DIST_FROM_HOME*MAX_DIST_FROM_HOME*4);
+  reset_visit_statuses(home);
+  return closest;
+}
+
+void prune(struct path_node *start) {
+  for(struct path_node *cur = start; NULL != cur && NULL != cur->next && NULL != cur->next->next;) {
+    bool can_skip = false;
+    for(int i = 0; i < cur->wp->num_neighbors; i++) {
+      if(cur->next->next->wp == cur->wp->neighbors[i]) {
+	can_skip = true;
+	break;
+      }
+    }
+    if(can_skip) {
+      struct path_node *temp = cur->next;
+      cur->next = cur->next->next;
+      free(temp);
+    }
+    else {
+      cur = cur->next;
+    }
+  }
+}
+
+struct path_node *greedy_path(struct vis_node * const start, struct vis_node * const target) {
+  reset_visit_statuses(start);
+  struct path_node *first_wp = init_path_node(start, NULL);
+  struct path_node *cur = first_wp;
+  while(target != cur->wp) {
+    cur->wp->status = VISITED;
+    struct vis_node *next = best_neighbor(cur->wp, target);
+    cur = init_path_node(next, cur);
+  }
+  prune(first_wp);
+  reset_visit_statuses(start);
+  return first_wp;
+}
+
+struct path_node *extend_greedy_path(struct path_node *path, struct vis_node *const target) {
+  struct path_node *last_dest = path;
+  while(NULL != last_dest && NULL != last_dest->next) {
+    last_dest = last_dest->next;
+  }
+  struct path_node *cur = greedy_path(last_dest->wp, target);
+  last_dest->next = cur->next;
+  free(cur);
+  reset_visit_statuses(path->wp);
+  return path;
+}
+
+struct path_node *greedy_path_xy(struct vis_node *const home, float start_x, float start_y, float end_x, float end_y) {
+  struct vis_node *start_node = closest_node(home, start_x, start_y),
+    *end_node = closest_node(home, end_x, end_y);
+  return greedy_path(start_node, end_node);
+}
+
+
+
+struct path_node *astar_path(struct vis_node *const start, struct vis_node *const target) {
+  //printf("Using A* to find the shortest path from (%.1f, %.1f) to (%.1f, %.1f)\n", start->x, start->y, target->x, target->y);
+  struct astar_node *head = init_first_astar_node(start, target);
+  struct astar_node *goal = NULL;
+  struct astar_node *considered = NULL;
+  while(NULL != head) {
+    struct astar_node *node = astar_pop(&head);
+    if(node->wp == target) {
+      //printf("Reached the goal: (%.1f, %.1f)\n", node->wp->x, node->wp->y);
+      goal = node;
+      break;
+    }
+    struct vis_node *wp = node->wp;
+    //printf("Now considering (%.1f, %.1f)\n", wp->x, wp->y);
+    for(int i = 0; i < wp->num_neighbors; i++) {
+      struct vis_node *neighbor = wp->neighbors[i];
+      float dist_so_far = node->dist_so_far + sqrt(DistanceSquare(wp->x, wp->y, neighbor->x, neighbor->y));
+      struct astar_node *prospective = init_astar_node(node, neighbor, target, dist_so_far);
+      head = astar_insert(head, prospective);
+    }
+    considered = astar_insert(considered, node);
+  }
+  if(NULL == goal) {
+    printf("Null goal\n");
+    return NULL;
+  }
+  struct path_node *first = NULL;//init_path_node(goal->wp, NULL);
+  for(struct astar_node *pt = goal; NULL != pt; pt = pt->parent) {
+    //printf("prepending (%.1f, %.1f)\n", pt->wp->x, pt->wp->y);
+    struct path_node *tmp = init_path_node(pt->wp, NULL);
+    tmp->next = first;
+    first = tmp;
+  }
+  //printf("Finished calculating the path\n");
+  //print_path(first);
+  //astar_free(&head);
+  astar_free(considered);
+  astar_free(head);
+  free(goal);
+  return first;
+}
+
+struct path_node *extend_astar_path(struct path_node *path, struct vis_node *const target) {
+  //printf("Extending the path to (%.1f, %.1f)\n", target->x, target->y);
+  struct path_node *last_dest = path;
+  while(NULL != last_dest && NULL != last_dest->next) {
+    last_dest = last_dest->next;
+  }
+  struct path_node *cur = astar_path(last_dest->wp, target);
+  last_dest->next = cur->next;
+  free(cur);
+  return path;
+}
+
+struct path_node *astar_path_xy(struct vis_node *const home, float start_x, float start_y, float end_x, float end_y) {
+  struct vis_node *start_node = closest_node(home, start_x, start_y),
+    *end_node = closest_node(home, end_x, end_y);
+  return astar_path(start_node, end_node);
+}
+
+void print_path(struct path_node *start) {
+  printf("Calculated path:");
+  for(struct path_node *cur = start; NULL != cur; cur = cur->next) {
+    printf(" %d(%.1f, %.1f)", cur->wp->node_id, cur->wp->x, cur->wp->y);
+  }
+  printf("\n");
+}
+
+bool nav_path(struct path_node *start_node) {
+  if(NULL == start_node) {
+    printf("Start node is null, somehow\n");
+    return false;
+  }
+  struct EnuCoor_i start_coords, end_coords;
+  if(start_node) {
+    start_coords.x = (int)(start_node->wp->x);
+    start_coords.y = (int)(start_node->wp->y);
+    start_coords.z = (int)(NAV_DEFAULT_ALT);
+    if(start_node->next) {
+      end_coords.x = (int)(start_node->next->wp->x);
+      end_coords.y = (int)(start_node->next->wp->y);
+      end_coords.z = (int)(NAV_DEFAULT_ALT);
+      VECT3_COPY(navigation_target, end_coords);
+      dist2_to_wp = get_dist2_to_point(&end_coords);
+      nav_route(&start_coords, &end_coords);
+    }
+    else {
+      return true;
+    }
+  }
+  if(nav_approaching_from(&end_coords, NULL, 0)) {
+    return true;
+  }
+  return false;
+}
+
+void free_path(struct path_node *start_node) {
+  if(start_node) {
+    free_path(start_node->next);
+    start_node->next = NULL;
+    free(start_node);
+  }
+}
+
+
+
+/**
+ * END FOR NO FLY ZONES
+ **/
 //#endif

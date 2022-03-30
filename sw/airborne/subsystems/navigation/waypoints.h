@@ -42,9 +42,20 @@ struct Waypoint {
   struct LlaCoor_i lla;
 };
 
+struct Noflypoint {
+  uint8_t flags;
+  struct EnuCoor_i enu_i;
+  struct EnuCoor_f enu_f;
+  struct LlaCoor_i lla;
+  float radius;
+};
+
 extern const uint8_t nb_waypoint;
 /** size == nb_waypoint, waypoint 0 is a dummy waypoint */
 extern struct Waypoint waypoints[];
+
+extern const uint8_t nb_noflypoint;
+extern struct Noflypoint noflypoints[];
 
 /* aliases for backwards compatibilty */
 #define WaypointX(_wp)    waypoint_get_x(_wp)

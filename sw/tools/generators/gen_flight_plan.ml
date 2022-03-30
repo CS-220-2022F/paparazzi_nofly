@@ -207,6 +207,9 @@ let print_noflypoint_lla_wgs84 = fun out utm0 default_alt waypoint ->
   let alt = float_of_string alt +. Egm96.of_wgs84 wgs84 in
   fprintf out " {.lat=%Ld, .lon=%Ld, .alt=%.0f, .rad=%.1f}, /* 1e7deg, 1e7deg, mm (above WGS84 ref ellipsoid) */ \\\n" (convert_angle wgs84.posn_lat) (convert_angle wgs84.posn_long) (1000. *. alt) rad
 
+let print_nfp_radius = fun out noflypoint ->
+  let rad = float_attrib noflypoint "radius" in
+  fprintf out "%.1f,\\\n" rad
 
 let get_index_block = fun x ->
   try
@@ -1230,13 +1233,16 @@ let print_flight_plan_h = fun xml utm0 xml_file out_file ->
   List.iter (print_noflypoint_utm out alt) noflypoints;
   lprintf out "};\n";
   Xml2h.define_out out "NOFLYPOINTS_ENU" "{ \\";
-  List.iter (print_noflypoint_enu out utm0 alt) noflypoints;
+  List.iter (print_waypoint_enu out utm0 alt) noflypoints;
   lprintf out "};\n";
   Xml2h.define_out out "NOFLYPOINTS_LLA" "{ \\";
   List.iter (print_noflypoint_lla out utm0 alt) noflypoints;
   lprintf out "};\n";
   Xml2h.define_out out "NOFLYPOINTS_LLA_WGS84" "{ \\";
-  List.iter (print_noflypoint_lla_wgs84 out utm0 alt) noflypoints;
+  List.iter (print_waypoint_lla_wgs84 out utm0 alt) noflypoints;
+  lprintf out "};\n";
+  Xml2h.define_out out "NOFLYPOINTS_RADII" "{ \\";
+  List.iter (print_nfp_radius out) noflypoints;
   lprintf out "};\n";
   Xml2h.define_out out "NOFLYPOINTS_GLOBAL" "{ \\";
   List.iter (print_waypoint_global out) noflypoints;
@@ -1311,7 +1317,7 @@ let print_flight_plan_h = fun xml utm0 xml_file out_file ->
   List.iter (fun v -> print_var_impl out abi_msgs v) variables;
   lprintf out "\n";
 
-  lprintf out "enum VISIT_STATUS {UNVISITED, VISITING, VISITED};\n";
+  (* lprintf out "enum VISIT_STATUS {UNVISITED, VISITING, VISITED};\n";
   lprintf out "struct vis_node {\n";
   right();
   lprintf out "int num_neighbors;\n";
@@ -1329,9 +1335,9 @@ let print_flight_plan_h = fun xml utm0 xml_file out_file ->
   lprintf out "struct vis_node *wp;\n";
   lprintf out "struct path_node *next;\n";
   left();
-  lprintf out "};\n";
+  lprintf out "};\n"; *)
   lprintf out "struct path_node *PATH_START = NULL, *CURR_NODE = NULL;\n\n";
-  lprintf out "struct astar_node {\n";
+  (* lprintf out "struct astar_node {\n";
   right();
   lprintf out "struct vis_node *wp;\n";
   lprintf out "struct astar_node *next;\n";
@@ -1339,7 +1345,7 @@ let print_flight_plan_h = fun xml utm0 xml_file out_file ->
   lprintf out "float dist_so_far;\n";
   lprintf out "struct astar_node *parent;\n";
   left();
-  lprintf out "};\n\n";
+  lprintf out "};\n\n";*)
   lprintf out "float dest_x = 0.0, dest_y = 0.0;\n";
   lprintf out "bool path_calculated = false;\n\n";
 

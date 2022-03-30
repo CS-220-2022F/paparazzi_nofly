@@ -34,6 +34,7 @@
 #include "subsystems/navigation/waypoints.h"
 #include "subsystems/navigation/common_flight_plan.h"
 #include "autopilot.h"
+#include <stdio.h>
 
 /** default approaching_time for a wp */
 #ifndef CARROT
@@ -41,6 +42,10 @@
 #endif
 
 #define NAV_FREQ 16
+
+
+#define Square(_x) ((_x)*(_x))
+#define DistanceSquare(p1_x, p1_y, p2_x, p2_y) (Square(p1_x-p2_x)+Square(p1_y-p2_y))
 
 extern struct vis_node *HOME_NODE;
 
@@ -83,6 +88,9 @@ extern float failsafe_mode_dist2; ///< maximum squared distance to home wp befor
 extern float dist2_to_wp;       ///< squared distance to next waypoint
 
 extern bool exception_flag[10];
+
+extern struct path_node *PATH_START, *CURR_NODE;
+extern struct vis_node *temp_node;
 
 
 /*****************************************************************
@@ -179,6 +187,63 @@ bool nav_check_wp_time(struct EnuCoor_i *wp, uint16_t stay_time);
 #define NavCheckWaypointTime(wp, time) nav_check_wp_time(&waypoints[wp].enu_i, time)
 
 
+/*for no-fly zones*/
+
+extern bool path_calculated;
+
+typedef float coords[2];
+
+extern int intersect_two_lines(float *x_i, float *y_i, float ax0, float ay0, float ax1, float ay1, float bx0, float by0, float bx1, float by1);
+
+extern int path_intersect_nfz(int num_verts, coords *verts);
+
+extern float *centroid(int num_verts, coords *verts);
+
+extern float get_angle(coords p0, coords p1, int num_verts, coords *verts);
+
+extern coords *buffer_zone(int num_verts, int *verts);
+
+extern int num_nodes;
+extern struct vis_node **nodes;
+
+extern struct vis_node *init_vis_node(float x_in, float y_in, int capacity);
+
+extern int add_neighbor(struct vis_node *node, struct vis_node *new_neighbor, int weight);
+
+extern int is_visible(struct vis_node *p1, struct vis_node *p2, int num_bzs, struct vis_node ***bzs, int *bz_sizes);
+
+extern int is_visible2(struct vis_node *p1, struct vis_node *p2);
+
+extern void reconstruct_visibility_graph();
+
+extern void free_visibility_graph(struct vis_node *home);
+
+extern struct vis_node *create_visibility_graph();
+
+extern void print_visibility_graph(struct vis_node *home, int depth);
+
+struct vis_node *closest_node(struct vis_node *home, float target_x, float target_y);
+
+extern struct path_node *greedy_path(struct vis_node *const start, struct vis_node *const target);
+
+extern struct path_node *extend_greedy_path(struct path_node *path, struct vis_node *const target);
+
+extern struct path_node *greedy_path_xy(struct vis_node *const home, float start_x, float start_y, float end_x, float end_y);
+
+extern struct path_node *astar_path(struct vis_node *const start, struct vis_node *const target);
+
+extern struct path_node *extend_astar_path(struct path_node *path, struct vis_node *const target);
+
+extern struct path_node *astar_path_xy(struct vis_node *const home, float start_x, float start_y, float end_x, float end_y);
+
+extern void print_path(struct path_node *start);
+
+extern bool nav_path(struct path_node *start_node);
+
+extern void free_path(struct path_node *start_node);
+
+  /*end for no-fly zones*/
+
 extern void navigation_update_wp_from_speed(uint8_t wp, struct Int16Vect3 speed_sp, int16_t heading_rate_sp);
 
 /* should we really keep this one ??
@@ -245,10 +310,35 @@ static inline void NavGotoWaypointHeading(uint8_t wp)
 
 /*********** Navigation to  waypoint *************************************/
 static inline void NavGotoWaypoint(uint8_t wp)
-{
+/*{
   horizontal_mode = HORIZONTAL_MODE_WAYPOINT;
   VECT3_COPY(navigation_target, waypoints[wp].enu_i);
   dist2_to_wp = get_dist2_to_waypoint(wp);
+}*/
+{
+  horizontal_mode = HORIZONTAL_MODE_WAYPOINT;
+  if(!path_calculated) {
+    struct EnuCoor_i dest_coords = waypoints[wp].enu_i;
+    struct EnuCoor_i *cur_coords = stateGetPositionEnu_i();
+    float cur_x = (float)cur_coords->x, cur_y = (float)cur_coords->y;
+    struct vis_node *cur_loc_node = closest_node(HOME_NODE, cur_x, cur_y);
+    struct vis_node *end_node = closest_node(HOME_NODE, (float)dest_coords.x, (float)dest_coords.y);
+    free_path(PATH_START);
+    if(temp_node) { free(temp_node); temp_node = NULL; }
+    PATH_START = astar_path(cur_loc_node, end_node);
+    CURR_NODE = PATH_START;
+    path_calculated = true;
+  }
+  else {
+    if(nav_path(CURR_NODE)) {
+      if(CURR_NODE->next) {
+	CURR_NODE = CURR_NODE->next;
+      }
+      else {
+	path_calculated = false;
+      }
+    }
+  }
 }
 
 /*********** Navigation on a circle **************************************/
@@ -277,7 +367,7 @@ extern uint8_t nav_oval_count;
 /*********** Navigation along a line *************************************/
 extern void nav_route(struct EnuCoor_i *wp_start, struct EnuCoor_i *wp_end);
 extern struct FloatVect2 line_vect, to_end_vect;
-#ifdef GUIDANCE_INDI_HYBRID
+/*#ifdef GUIDANCE_INDI_HYBRID
 static inline void NavSegment(uint8_t wp_start, uint8_t wp_end)
 {
   VECT2_DIFF(line_vect, waypoints[wp_end].enu_f, waypoints[wp_start].enu_f);
@@ -291,7 +381,42 @@ static inline void NavSegment(uint8_t wp_start, uint8_t wp_end)
   horizontal_mode = HORIZONTAL_MODE_ROUTE;
   nav_route(&waypoints[wp_start].enu_i, &waypoints[wp_end].enu_i);
 }
+#endif*/
+static inline void NavSegment(uint8_t wp_start, uint8_t wp_end) {
+  if(!path_calculated) {
+    struct EnuCoor_i dest_coords = waypoints[wp_end].enu_i;
+    struct EnuCoor_i start_coords = waypoints[wp_start].enu_i;
+    struct EnuCoor_i *cur_coords = stateGetPositionEnu_i();
+    float cur_x = (float)cur_coords->x, cur_y = (float)cur_coords->y;
+    struct vis_node *cur_loc_node = closest_node(HOME_NODE, cur_x, cur_y);
+    struct vis_node *start_node = closest_node(HOME_NODE,(float)start_coords.x, (float)start_coords.y);
+    struct vis_node *end_node = closest_node(HOME_NODE, (float)dest_coords.x, (float)dest_coords.y);
+    free_path(PATH_START);
+    if(temp_node) { free(temp_node); temp_node = NULL; }
+    PATH_START = extend_astar_path(astar_path(cur_loc_node, start_node), end_node);
+    CURR_NODE = PATH_START;
+    path_calculated = true;
+  }
+  else {
+    if(nav_path(CURR_NODE)) {
+      if(CURR_NODE->next) {
+	CURR_NODE = CURR_NODE->next;
+      }
+      else {
+	path_calculated = false;
+      }
+    }
+  }
+  /*#ifdef GUIDANCE_INDI_HYBRID
+  VECT2_DIFF(line_vect, waypoints[wp_end].enu_f, waypoints[wp_start].enu_f);
+  VECT2_DIFF(to_end_vect, waypoints[wp_end].enu_f, *stateGetPositionEnu_f());
+  VECT3_COPY(navigation_target, waypoints[wp_end].enu_i);
 #endif
+  horizontal_mode = HORIZONTAL_MODE_ROUTE;
+#ifndef GUIDANCE_INDI_HYBRID
+  nav_route(&waypoints[wp_start].enu_i, &waypoints[wp_end].enu_i);
+  #endif*/
+}
 
 /** Nav glide routine */
 static inline void NavGlide(uint8_t start_wp, uint8_t wp)
@@ -317,5 +442,6 @@ extern void nav_follow(uint8_t _ac_id, uint32_t distance, uint32_t height);
     flight_altitude = x; \
     nav_flight_altitude = POS_BFP_OF_REAL(flight_altitude - state.ned_origin_f.hmsl); \
   }
+
 
 #endif /* NAVIGATION_H */

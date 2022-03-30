@@ -35,6 +35,31 @@ extern uint16_t stage_time, block_time;
 extern uint8_t nav_stage, nav_block;
 extern uint8_t last_block, last_stage;
 
+enum VISIT_STATUS {UNVISITED, VISITING, VISITED};
+struct vis_node {
+  int num_neighbors;
+  int capacity;
+  struct vis_node **neighbors;
+  int *weights;
+  float x, y;
+  int node_id;
+  enum VISIT_STATUS status;
+};
+struct vis_node *HOME_NODE;
+
+struct path_node {
+  struct vis_node *wp;
+  struct path_node *next;
+};
+
+struct astar_node {
+  struct vis_node *wp;
+  struct astar_node *next;
+  float priority;
+  float dist_so_far;
+  struct astar_node *parent;
+};
+
 /** needs to be implemented by fixedwing and rotorcraft seperately */
 void nav_init_stage(void);
 
